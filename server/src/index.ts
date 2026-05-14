@@ -31,6 +31,8 @@ Usage:
 
 Env:
   YOLO_WS_PORT               WebSocket port the extension connects to (default 8765).
+  YOLO_SIBLING_PORT          IPC port secondary MCP servers use to relay through
+                             the primary (default YOLO_WS_PORT+1 = 8766).
 `);
   process.exit(0);
 }
@@ -46,7 +48,8 @@ if (sub === "--version" || sub === "-v") {
 }
 
 const WS_PORT = Number(process.env.YOLO_WS_PORT ?? 8765);
-const bridge = new ExtensionBridge(WS_PORT);
+const SIBLING_PORT = Number(process.env.YOLO_SIBLING_PORT ?? WS_PORT + 1);
+const bridge = new ExtensionBridge(WS_PORT, SIBLING_PORT);
 
 const instructions = `
 yolo-chrome-mcp lets you observe and control any open Chrome tab.
@@ -129,5 +132,4 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 const transport = new StdioServerTransport();
 await server.connect(transport);
 
-// Surface bridge readiness on stderr for human debugging (stdout is reserved for MCP).
-process.stderr.write(`yolo-chrome-mcp: listening for extension on ws://127.0.0.1:${WS_PORT}\n`);
+// Role + readiness messages are emitted from inside bridge.init().

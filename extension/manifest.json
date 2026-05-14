@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Yolo Chrome MCP for Claude",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Expose every open Chrome tab to an MCP server so AIs can browse, debug, and operate them.",
   "permissions": ["tabs", "debugger", "storage", "scripting", "cookies", "alarms"],
   "host_permissions": ["<all_urls>"],
