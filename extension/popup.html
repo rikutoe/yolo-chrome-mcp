@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; padding: 12px; width: 260px; margin: 0; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .status { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; background: #f4f4f5; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .on { background: #16a34a; }
+  .off { background: #dc2626; }
+  label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
+  select, button { width: 100%; padding: 6px; margin-top: 4px; font-size: 13px; }
+  button { cursor: pointer; }
+  .hint { font-size: 11px; color: #777; margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<h1>yolo-chrome-mcp</h1>
+<div class="status">
+  <div id="dot" class="dot off"></div>
+  <span id="text">checking...</span>
+</div>
+<label>Safety mode
+  <select id="safety">
+    <option value="always">always</option>
+    <option value="dangerous-only" selected>dangerous-only</option>
+    <option value="off">off</option>
+  </select>
+</label>
+<button id="reconnect">Reconnect</button>
+<div class="hint">MCPサーバが <code>ws://127.0.0.1:8765</code> で待機している必要があります。</div>
+<script src="popup.js" type="module"></script>
+</body>
+</html>

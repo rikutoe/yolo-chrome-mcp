@@ -1,0 +1,30 @@
+{
+  "manifest_version": "0.3",
+  "name": "yolo-chrome-mcp",
+  "display_name": "Yolo Chrome MCP",
+  "version": "0.1.0",
+  "description": "Observe and control any open Chrome tab from Claude. Requires loading the paired Chrome extension once.",
+  "long_description": "Pairs with a Chrome extension (loaded as an unpacked extension) so Claude can list tabs, screenshot, inspect the accessibility tree, read console/network/storage, and click/type/scroll/navigate inside your real, already-logged-in Chrome session. Destructive actions trigger an in-tab confirmation overlay.",
+  "author": {
+    "name": "Rikuto Echigoya",
+    "email": "rikuto@seedx.tech"
+  },
+  "homepage": "https://github.com/seedx-tech/yolo-chrome-mcp",
+  "license": "MIT",
+  "keywords": ["chrome", "browser", "automation", "debugging"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/dist/index.js"],
+      "env": {}
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

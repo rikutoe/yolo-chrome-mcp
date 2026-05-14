@@ -1,0 +1,17 @@
+{
+  "name": "yolo-chrome-mcp-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["server", "extension", "shared"],
+  "scripts": {
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w extension",
+    "build:server": "npm run build -w server",
+    "build:extension": "npm run build -w extension",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "build:all": "npm run build && npm run build:mcpb",
+    "release:dryrun": "npm run build:all && cd server && npm pack --dry-run",
+    "start": "node server/dist/index.js",
+    "dev:server": "npm run dev -w server"
+  }
+}

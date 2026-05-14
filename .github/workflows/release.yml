@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write  # required for npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: npm install
+
+      - name: Build (server + extension + mcpb)
+        run: npm run build:all
+
+      - name: Pack Chrome extension zip
+        run: |
+          cd extension/dist
+          zip -r ../../build/yolo-chrome-mcp-extension-${{ github.ref_name }}.zip .
+
+      - name: Publish to npm
+        run: cd server && npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/yolo-chrome-mcp-*.mcpb
+            build/yolo-chrome-mcp-extension-*.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **Claude Code:**
+            ```
+            claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest
+            npx yolo-chrome-mcp install   # then load the Chrome extension once
+            ```
+
+            **Claude Desktop:** download `yolo-chrome-mcp-*.mcpb` below and drag it onto Claude Desktop.
+
+            **Chrome extension (manual):** download `yolo-chrome-mcp-extension-*.zip`, unzip, load at chrome://extensions → Load unpacked.

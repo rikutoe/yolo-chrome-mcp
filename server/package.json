@@ -1,0 +1,39 @@
+{
+  "name": "yolo-chrome-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that exposes any open Chrome tab to Claude (paired with a Chrome extension).",
+  "license": "MIT",
+  "author": "Rikuto Echigoya <rikuto@seedx.tech>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seedx-tech/yolo-chrome-mcp.git"
+  },
+  "homepage": "https://github.com/seedx-tech/yolo-chrome-mcp",
+  "bugs": "https://github.com/seedx-tech/yolo-chrome-mcp/issues",
+  "keywords": ["mcp", "model-context-protocol", "chrome", "browser", "automation", "claude"],
+  "type": "module",
+  "bin": {
+    "yolo-chrome-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "extension/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js",
+    "prepack": "node prepack.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.6.0"
+  }
+}
