@@ -94,7 +94,7 @@ Source: https://github.com/rikutoe/yolo-chrome-mcp
 License: MIT
 Bugs / requests: https://github.com/rikutoe/yolo-chrome-mcp/issues
 
-Privacy policy: https://seedx.tech/privacy/yolo-chrome-mcp
+Privacy policy: https://seedx.tech/privacy
 ```
 
 ---
@@ -159,10 +159,10 @@ extension."_
 ### Privacy policy URL
 
 ```
-https://seedx.tech/privacy/yolo-chrome-mcp
+https://seedx.tech/privacy
 ```
 
-(Source: `app/privacy/yolo-chrome-mcp/page.tsx` in the SeedX-LLC/corp-website repo. Already deployed.)
+(Source: `app/privacy/page.tsx` in the SeedX-LLC/corp-website repo. Already deployed.)
 
 ---
 
