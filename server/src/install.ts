@@ -6,6 +6,14 @@ import { spawn } from "node:child_process";
 import { platform, homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
 
+// ---------- constants ----------
+
+// Chrome Web Store URL. Empty until the listing is approved — the install
+// helper then falls back to "Load unpacked". Once the listing is live, set
+// this to the canonical https://chromewebstore.google.com/... link so users
+// get the one-click flow.
+const CHROME_WEB_STORE_URL = process.env.YOLO_CHROME_WEB_STORE_URL ?? "";
+
 // ---------- paths ----------
 
 const HOME = homedir();
@@ -208,12 +216,20 @@ export async function runInstall() {
   const node = process.execPath;
   const serverEntry = fileURLToPath(new URL("./index.js", import.meta.url));
 
-  process.stdout.write(`
-yolo-chrome-mcp — install helper
-================================
+  const useStore = CHROME_WEB_STORE_URL.length > 0;
+  const step1 = useStore
+    ? `Step 1. Install the Chrome extension
+------------------------------------
+  • Opening the Chrome Web Store listing in your default browser now…
+  • Click "Add to Chrome" and confirm.
 
-Step 1. Load the Chrome extension
----------------------------------
+      ${CHROME_WEB_STORE_URL}
+
+  (If you prefer a local / dev build, run with YOLO_CHROME_WEB_STORE_URL=""
+  to fall back to "Load unpacked" instructions for ${dir}.)
+`
+    : `Step 1. Load the Chrome extension (unpacked, dev mode)
+------------------------------------------------------
   • Opening chrome://extensions in your default browser now…
   • Toggle "Developer mode" (top-right).
   • Click "Load unpacked" → in the file dialog press Cmd/Ctrl+Shift+G,
@@ -221,6 +237,16 @@ Step 1. Load the Chrome extension
 
       ${dir}
 ${clipboardOk ? "      (already copied to clipboard)" : ""}
+
+  (Once the Chrome Web Store listing is approved, this step becomes a
+  one-click "Add to Chrome" install.)
+`;
+
+  process.stdout.write(`
+yolo-chrome-mcp — install helper
+================================
+
+${step1}
 
 Step 2. Register the server with Claude Code
 --------------------------------------------
@@ -237,7 +263,7 @@ Step 2. Register the server with Claude Code
     project — Claude in other directories will report "Failed to connect".
 
 `);
-  openUrl("chrome://extensions");
+  openUrl(useStore ? CHROME_WEB_STORE_URL : "chrome://extensions");
 
   // Step 3 — interactive routing setup.
   const rl = createInterface({ input: process.stdin, output: process.stdout });

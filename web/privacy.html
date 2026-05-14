@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — Yolo Chrome MCP for Claude</title>
+<style>
+  :root {
+    --fg: #0f172a;
+    --muted: #475569;
+    --bg: #ffffff;
+    --rule: #e2e8f0;
+    --accent: #0f172a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e2e8f0; --muted:#94a3b8; --bg:#0b0f17; --rule:#1e293b; --accent:#e2e8f0; }
+  }
+  *{box-sizing:border-box}
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { border-bottom: 1px solid var(--rule); padding-bottom: 24px; margin-bottom: 32px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .meta { color: var(--muted); font-size: 13px; }
+  h2 { font-size: 18px; margin: 32px 0 10px; letter-spacing: -0.01em; }
+  p { margin: 10px 0; }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; background: rgba(127,127,127,0.12); padding: 1px 5px; border-radius: 3px; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Yolo Chrome MCP for Claude · last updated 2026-05-14</p>
+</header>
+
+<p>This Chrome extension ("the Extension") exposes the contents of the
+Chrome tab it is currently observing to an MCP (Model Context Protocol)
+server running on the same computer, so that an AI assistant (typically
+Claude Code or Claude Desktop) can read and operate the page.</p>
+
+<p>This page explains exactly what data the Extension touches, where it
+goes, and what it does <strong>not</strong> do.</p>
+
+<h2>What the Extension can access</h2>
+<p>When you ask Claude to operate a tab, the Extension uses the standard
+Chrome extension permissions (<code>tabs</code>, <code>debugger</code>,
+<code>scripting</code>, <code>cookies</code>, <code>storage</code>,
+<code>alarms</code>) and the Chrome DevTools Protocol to:</p>
+<ul>
+  <li>list open tabs and basic metadata (title, URL, status)</li>
+  <li>take screenshots of a tab</li>
+  <li>read visible page text and the accessibility tree</li>
+  <li>read console messages and network activity buffered by the page</li>
+  <li>read cookies for the active page when Claude requests them</li>
+  <li>click, type, scroll, and navigate when Claude requests it</li>
+  <li>evaluate JavaScript expressions in a page when Claude requests it</li>
+</ul>
+<p>The Extension does this <strong>only on tabs that the AI explicitly
+references by tab id</strong>. Tabs the AI never asks about are not
+read.</p>
+
+<h2>Where the data goes</h2>
+<p>The Extension talks <strong>only</strong> to a local WebSocket server
+running at <code>ws://127.0.0.1:8765</code> (or a port you configure) on
+your own computer. That server is the <code>yolo-chrome-mcp</code> MCP
+server you installed via npm or Claude Desktop. The Extension does not
+make any network requests to any third-party server.</p>
+<p>What the local MCP server does with that data is determined by Claude
+Code / Claude Desktop, which is the parent process:</p>
+<ul>
+  <li>Claude Code / Desktop forwards the data to Anthropic's API as part
+    of the conversation context, subject to
+    <a href="https://www.anthropic.com/privacy">Anthropic's privacy
+    policy</a>.</li>
+  <li>The MCP server itself does not log, persist, or transmit data
+    anywhere else.</li>
+</ul>
+
+<h2>What the Extension stores locally</h2>
+<p>The Extension stores a single preference in
+<code>chrome.storage.local</code>:</p>
+<ul>
+  <li><code>safetyMode</code>: one of <code>always</code>,
+    <code>dangerous-only</code>, <code>off</code> — controls when the
+    in-tab safety overlay asks for confirmation before a destructive
+    action.</li>
+</ul>
+<p>That's it. No browsing history, no page contents, no credentials are
+persisted by the Extension.</p>
+
+<h2>What the Extension does not do</h2>
+<ul>
+  <li>It does not send any data to any third-party analytics or
+    telemetry service.</li>
+  <li>It does not read tabs in the background without an explicit
+    request from the MCP server.</li>
+  <li>It does not transmit data over any network other than the local
+    loopback connection to the MCP server.</li>
+  <li>It does not modify, share, or sell your data.</li>
+</ul>
+
+<h2>Sensitive actions</h2>
+<p>The Extension ships with an in-tab "safety overlay" that asks for
+confirmation before potentially-sensitive actions (money labels,
+account-destructive labels, password-form submits, credit-card /
+password typing, risky <code>evalJs</code>). You can adjust this in the
+Extension popup.</p>
+<p>The companion <code>yolo-chrome-mcp</code> CLI also installs a
+PreToolUse hook in Claude Code that prevents Claude from silently
+switching to other browser tools that bypass the safety overlay.</p>
+
+<h2>Contact</h2>
+<p>Source code:
+<a href="https://github.com/rikutoe/yolo-chrome-mcp">github.com/rikutoe/yolo-chrome-mcp</a></p>
+<p>For questions about this policy, file an issue on the repository or
+email <a href="mailto:rikuto@seedx.tech">rikuto@seedx.tech</a>.</p>
+
+<footer>
+  © 2026 Rikuto Echigoya / SeedX
+</footer>
+</body>
+</html>
