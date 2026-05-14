@@ -54,7 +54,7 @@ extension/             MV3 Chrome extension
   src/cdp.ts           Thin chrome.debugger wrapper
   src/session.ts       Per-tab CDP attach + console/network ring buffers
   src/handlers.ts      Handler implementations for all 17 tools
-  src/safety.ts        Risky-action classifier (label / submit / cross-origin / etc.)
+  src/safety.ts        Risky-action classifier (money labels / account-destructive / password forms / cc & password input)
   src/overlay.ts       In-tab confirmation overlay (Shadow DOM)
   src/overlayBridge.ts Injects overlay.js then round-trips a yes/no message
   src/popup.ts         Extension popup (connection status + safety mode)
@@ -83,3 +83,5 @@ scripts/e2e.mjs        Stdio E2E driver that exercises tools
 - **D6: MV3 service worker keepalive via `chrome.alarms` every 15s** — Avoids needing an offscreen document (and the extra permission). On each alarm, reconnect if the socket is dead. (2026-05-14)
 - **D7: Three distribution paths** — npm/npx (Claude Code), MCPB (Claude Desktop), GitHub Release zip (extension only, manual). Don't wait on Chrome Web Store review. (2026-05-14)
 - **D8: Root package is named `yolo-chrome-mcp-monorepo`** — Clashed with the publishable `server/` package name `yolo-chrome-mcp` and broke `npm run -w`. (2026-05-14)
+- **D10: Browser routing is enforced via a PreToolUse hook, set up by `npx yolo-chrome-mcp install`** — MCP `instructions` are advisory and Claude ignored them in practice (Claude jumped straight to `mcp__Claude_in_Chrome__*`). Replaced with a real PreToolUse hook in `~/.claude/settings.json` matching `mcp__Claude_in_Chrome__.*|mcp__Control_Chrome__.*`. The hook script lives at `~/.yolo-chrome-mcp/browser-routing-hook.sh` and returns `{"decision":"block","reason":...}` — telling Claude to use `mcp__yolo-chrome__*` instead, and (when `## Browser routing (yolo-chrome-mcp)` is missing from `~/.claude/CLAUDE.md`) to use `AskUserQuestion` to offer adding it. MCP has no install-time hook for global-config edits, so users run `npx yolo-chrome-mcp install` once — it interactively writes the hook script, registers it in `settings.json`, and appends the rule to `CLAUDE.md`. Idempotent. Removable via `npx yolo-chrome-mcp uninstall-routing`. (2026-05-14)
+- **D9: Safety overlay scope is "sensitive submission only"** — Navigation never prompts (reversible, low-risk). Generic submit/send/confirm labels も外す。プロンプトが出るのは: 金銭ラベル / 退会・解約・アカウント削除ラベル / パスワード input を含むフォーム内の submit / クレジットカード番号らしき値 or password input への type / 危険な evalJs（cookie・fetch・localStorage 改変）。日常操作で確認ダイアログが出ると AI が止まりすぎるため。 (2026-05-14)

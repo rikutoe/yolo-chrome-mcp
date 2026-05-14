@@ -13,11 +13,19 @@ You need both halves: the MCP server (driven by Claude) and the Chrome extension
 ### Option A — Claude Code (npx, recommended)
 
 ```bash
-claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest
-npx yolo-chrome-mcp install        # prints + opens the extension load helper
+claude mcp add --scope user yolo-chrome -- npx -y yolo-chrome-mcp@latest
+npx yolo-chrome-mcp install        # extension load + routing hook + CLAUDE.md rule
 ```
 
-The `install` step opens `chrome://extensions` and copies the extension folder path to your clipboard. In the file dialog: `Cmd/Ctrl+Shift+G` → `Cmd/Ctrl+V` → Select.
+**Important**: pass `--scope user`. Without it the server is registered only for the directory you ran the command from, and Claude in other projects will report "Failed to connect".
+
+The `install` step does three things, with prompts:
+
+1. **Extension load** — opens `chrome://extensions` and copies the extension folder path to your clipboard. In the file dialog: `Cmd/Ctrl+Shift+G` → `Cmd/Ctrl+V` → Select.
+2. **PreToolUse hook** (recommended) — writes `~/.yolo-chrome-mcp/browser-routing-hook.sh` and registers it in `~/.claude/settings.json` matching `mcp__Claude_in_Chrome__.*|mcp__Control_Chrome__.*`. When Claude tries to use a competing browser tool, the hook blocks and tells Claude to use `mcp__yolo-chrome__*` instead.
+3. **CLAUDE.md routing rule** (recommended) — appends a `## Browser routing (yolo-chrome-mcp)` section to `~/.claude/CLAUDE.md` so Claude has a persistent reason in plain language.
+
+Re-running `install` is idempotent. To remove the hook + rule later: `npx yolo-chrome-mcp uninstall-routing`.
 
 ### Option B — Claude Desktop (MCPB one-click)
 

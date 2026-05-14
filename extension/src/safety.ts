@@ -2,10 +2,17 @@ import * as cdp from "./cdp.js";
 
 export type SafetyDecision = "allowed" | "denied";
 
-const DANGEROUS_LABEL_PATTERNS = [
-  /送信|送る|決済|支払|購入|注文|削除|消去|退会|解約|サブミット/i,
-  /\b(submit|delete|remove|confirm|pay|buy|purchase|charge|withdraw|transfer|send)\b/i,
+// Truly sensitive: money movement, account-destructive, credential-sending.
+// Generic "submit/send/confirm" は外す（普通のフォーム送信で毎回確認が出てしまうため）。
+const MONEY_LABEL_PATTERNS = [
+  /決済|支払|購入|注文|入金|出金|送金|振込|チャージ|引き落とし/i,
+  /\b(pay|buy|purchase|checkout|charge|withdraw|transfer|deposit|wire)\b/i,
   /[¥$€£]\s*\d/,
+];
+
+const DESTRUCTIVE_LABEL_PATTERNS = [
+  /アカウント削除|退会|解約|永久削除|完全削除/i,
+  /\b(delete account|close account|deactivate|terminate account|permanently delete)\b/i,
 ];
 
 // Returns true if the action looks risky.
@@ -22,18 +29,10 @@ export async function classifyAction(
     return false;
   }
   if (action === "navigate") {
-    // Cross-origin navigation: ask. Same-origin: silent.
-    try {
-      const t = await chrome.tabs.get(tabId);
-      const cur = new URL(t.url ?? "");
-      const next = new URL(details.url);
-      return cur.origin !== next.origin;
-    } catch {
-      return true;
-    }
+    // ナビゲーションは可逆で副作用が小さいので、原則プロンプトなし。
+    return false;
   }
   if (action === "click") {
-    // Look at the element's text + nearby form.
     const stableId: string = details.stableId;
     const backendNodeId = Number(stableId.slice(1));
     if (!Number.isFinite(backendNodeId)) return false;
@@ -51,18 +50,58 @@ export async function classifyAction(
         attrMap["title"] ?? "",
         attrMap["name"] ?? "",
       ].join(" ");
-      if (attrMap["type"] === "submit") return true;
-      if (DANGEROUS_LABEL_PATTERNS.some((re) => re.test(corpus))) return true;
+      if (MONEY_LABEL_PATTERNS.some((re) => re.test(corpus))) return true;
+      if (DESTRUCTIVE_LABEL_PATTERNS.some((re) => re.test(corpus))) return true;
+      // submit ボタンでも、パスワード入力を含むフォーム内なら確認する。
+      if (attrMap["type"] === "submit" || node.nodeName === "BUTTON") {
+        if (await isInsidePasswordForm(tabId, backendNodeId)) return true;
+      }
     } catch {
-      // If we can't inspect, default to safe (cheaper than annoying prompts).
       return false;
     }
     return false;
   }
   if (action === "type") {
-    // Typing is usually safe; only flag credit-card-shaped input.
-    if (/\b\d{13,19}\b/.test(String(details.sample ?? ""))) return true;
+    // クレジットカード番号らしい値、またはパスワード input への入力は確認。
+    if (/\b\d{13,19}\b/.test(String(details.sample ?? details.text ?? ""))) return true;
+    const stableId: string | undefined = details.stableId;
+    if (stableId) {
+      const backendNodeId = Number(stableId.slice(1));
+      if (Number.isFinite(backendNodeId)) {
+        try {
+          const desc: any = await cdp.send(tabId, "DOM.describeNode", { backendNodeId, depth: 0 });
+          const attrs = desc.node.attributes ?? [];
+          const attrMap: Record<string, string> = {};
+          for (let i = 0; i < attrs.length; i += 2) attrMap[attrs[i]] = attrs[i + 1];
+          if (attrMap["type"] === "password") return true;
+          if (attrMap["autocomplete"]?.includes("cc-")) return true;
+        } catch {
+          // fall through
+        }
+      }
+    }
     return false;
   }
   return false;
+}
+
+// 指定ノードの祖先 form に type="password" の input があるか調べる。
+async function isInsidePasswordForm(tabId: number, backendNodeId: number): Promise<boolean> {
+  try {
+    const resolved: any = await cdp.send(tabId, "DOM.resolveNode", { backendNodeId });
+    const objectId = resolved.object?.objectId;
+    if (!objectId) return false;
+    const result: any = await cdp.send(tabId, "Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration: `function(){
+        const f = this.closest && this.closest('form');
+        if (!f) return false;
+        return !!f.querySelector('input[type="password"]');
+      }`,
+      returnByValue: true,
+    });
+    return result.result?.value === true;
+  } catch {
+    return false;
+  }
 }

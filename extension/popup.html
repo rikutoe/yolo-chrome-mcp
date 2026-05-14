@@ -1,35 +1,273 @@
 <!doctype html>
-<html>
+<html lang="ja">
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; padding: 12px; width: 260px; margin: 0; }
-  h1 { font-size: 14px; margin: 0 0 8px; }
-  .status { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; background: #f4f4f5; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .on { background: #16a34a; }
-  .off { background: #dc2626; }
-  label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
-  select, button { width: 100%; padding: 6px; margin-top: 4px; font-size: 13px; }
-  button { cursor: pointer; }
-  .hint { font-size: 11px; color: #777; margin-top: 6px; line-height: 1.4; }
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #64748b;
+    --subtle: #94a3b8;
+    --border: #e2e8f0;
+    --surface: #f8fafc;
+    --surface-hover: #f1f5f9;
+    --accent: #0f172a;
+    --accent-fg: #ffffff;
+    --ok: #10b981;
+    --ok-bg: rgba(16, 185, 129, 0.12);
+    --err: #ef4444;
+    --err-bg: rgba(239, 68, 68, 0.12);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f17;
+      --fg: #f1f5f9;
+      --muted: #94a3b8;
+      --subtle: #64748b;
+      --border: #1e293b;
+      --surface: #111827;
+      --surface-hover: #1a2233;
+      --accent: #f1f5f9;
+      --accent-fg: #0b0f17;
+      --ok-bg: rgba(16, 185, 129, 0.18);
+      --err-bg: rgba(239, 68, 68, 0.18);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--fg);
+    background: var(--bg);
+    width: 300px;
+    padding: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  h1 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .version {
+    font-size: 10px;
+    color: var(--subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+  .card + .card { margin-top: 10px; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dot-wrap {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+  }
+  .dot {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--err);
+  }
+  .dot.on { background: var(--ok); }
+  .dot.on::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: var(--ok);
+    opacity: 0.4;
+    animation: pulse 2s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  .status-text {
+    font-size: 12px;
+    font-weight: 500;
+    flex: 1;
+  }
+  .status-text .sub {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px;
+    gap: 2px;
+  }
+  .segmented input { display: none; }
+  .segmented label {
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+    user-select: none;
+  }
+  .segmented label:hover { color: var(--fg); }
+  .segmented input:checked + label {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+  .mode-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+    line-height: 1.45;
+  }
+
+  .button {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .button:hover { background: var(--surface-hover); }
+  .button:active { transform: translateY(1px); }
+  .button svg { width: 12px; height: 12px; }
+
+  .footer {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .footer code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--surface);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
 </style>
 </head>
 <body>
-<h1>yolo-chrome-mcp</h1>
-<div class="status">
-  <div id="dot" class="dot off"></div>
-  <span id="text">checking...</span>
-</div>
-<label>Safety mode
-  <select id="safety">
-    <option value="always">always</option>
-    <option value="dangerous-only" selected>dangerous-only</option>
-    <option value="off">off</option>
-  </select>
-</label>
-<button id="reconnect">Reconnect</button>
-<div class="hint">MCPサーバが <code>ws://127.0.0.1:8765</code> で待機している必要があります。</div>
-<script src="popup.js" type="module"></script>
+  <div class="header">
+    <div class="brand">
+      <div class="logo">Y</div>
+      <h1>yolo-chrome-mcp</h1>
+    </div>
+    <span class="version" id="version">v0.1.0</span>
+  </div>
+
+  <div class="card">
+    <div class="status-row">
+      <div class="dot-wrap"><div id="dot" class="dot"></div></div>
+      <div class="status-text">
+        <span id="text">確認中…</span>
+        <span class="sub" id="sub">MCP サーバを探しています</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label">セーフティ</div>
+    <div class="segmented" role="radiogroup" aria-label="Safety mode">
+      <input type="radio" name="safety" id="safety-always" value="always" />
+      <label for="safety-always">全確認</label>
+      <input type="radio" name="safety" id="safety-dangerous" value="dangerous-only" checked />
+      <label for="safety-dangerous">推奨</label>
+      <input type="radio" name="safety" id="safety-off" value="off" />
+      <label for="safety-off">オフ</label>
+    </div>
+    <div class="mode-hint" id="modeHint">
+      決済・退会・パスワード送信・危険な evalJs のみ確認します。
+    </div>
+  </div>
+
+  <div class="card">
+    <button class="button" id="reconnect">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4" />
+        <path d="M12 2v3h-3M4 14v-3h3" />
+      </svg>
+      <span>再接続</span>
+    </button>
+  </div>
+
+  <div class="footer">
+    <span>MCP server</span>
+    <code>ws://127.0.0.1:8765</code>
+  </div>
+
+  <script src="popup.js" type="module"></script>
 </body>
 </html>

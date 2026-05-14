@@ -208,7 +208,7 @@ export const tools: ToolDef[] = [
   {
     name: "setSafetyMode",
     description:
-      "Set the safety overlay mode: 'always' (confirm every action), 'dangerous-only' (default — confirm submits, deletes, money-ish UI), 'off' (no prompts).",
+      "Set the safety overlay mode: 'always' (confirm every action), 'dangerous-only' (default — confirm money UI, account-destructive labels, password-form submits, credit-card / password typing, risky evalJs), 'off' (no prompts). Navigation never prompts.",
     inputSchema: z.object({
       mode: z.enum(["always", "dangerous-only", "off"]),
     }),

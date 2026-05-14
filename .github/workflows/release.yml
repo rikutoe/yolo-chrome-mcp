@@ -48,9 +48,12 @@ jobs:
 
             **Claude Code:**
             ```
-            claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest
-            npx yolo-chrome-mcp install   # then load the Chrome extension once
+            claude mcp add --scope user yolo-chrome -- npx -y yolo-chrome-mcp@latest
+            npx yolo-chrome-mcp install   # extension load + routing hook + CLAUDE.md rule
             ```
+
+            `--scope user` makes the server available in every project, not just
+            the directory you ran the command from.
 
             **Claude Desktop:** download `yolo-chrome-mcp-*.mcpb` below and drag it onto Claude Desktop.
 
