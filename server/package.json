@@ -6,10 +6,10 @@
   "author": "Rikuto Echigoya <rikuto@seedx.tech>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/seedx-tech/yolo-chrome-mcp.git"
+    "url": "https://github.com/rikutoe/yolo-chrome-mcp.git"
   },
-  "homepage": "https://github.com/seedx-tech/yolo-chrome-mcp",
-  "bugs": "https://github.com/seedx-tech/yolo-chrome-mcp/issues",
+  "homepage": "https://github.com/rikutoe/yolo-chrome-mcp",
+  "bugs": "https://github.com/rikutoe/yolo-chrome-mcp/issues",
   "keywords": ["mcp", "model-context-protocol", "chrome", "browser", "automation", "claude"],
   "type": "module",
   "bin": {

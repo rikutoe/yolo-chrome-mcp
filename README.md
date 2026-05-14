@@ -21,14 +21,14 @@ The `install` step opens `chrome://extensions` and copies the extension folder p
 
 ### Option B — Claude Desktop (MCPB one-click)
 
-1. Download the latest `yolo-chrome-mcp-*.mcpb` from [Releases](https://github.com/seedx-tech/yolo-chrome-mcp/releases).
+1. Download the latest `yolo-chrome-mcp-*.mcpb` from [Releases](https://github.com/rikutoe/yolo-chrome-mcp/releases).
 2. Drag it onto Claude Desktop.
 3. Inside the bundle there is an `extension/` folder — load it as an unpacked extension at `chrome://extensions`.
 
 ### Option C — Build from source
 
 ```bash
-git clone https://github.com/seedx-tech/yolo-chrome-mcp
+git clone https://github.com/rikutoe/yolo-chrome-mcp
 cd yolo-chrome-mcp
 npm install
 npm run build
