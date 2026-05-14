@@ -1,23 +1,23 @@
-# 17ツール全件を Claude Code 経由で E2E
+# Run the full 17-tool E2E via Claude Code
 
 ## Goal
-Rikuto の Claude Code から実際に MCP ツールを呼んで、`scripts/e2e.mjs` で未検証だった以下を本物のセッションで通す:
-- `click` / `type` (a11y stableId 経由の操作)
-- `navigate` + `waitForStable` の連鎖
-- `getTabInfo` (CDP attach できるタブで)
+Drive the MCP from Rikuto's Claude Code against a real session and cover what `scripts/e2e.mjs` left unverified:
+- `click` / `type` (via accessibility-tree stableId)
+- `navigate` + `waitForStable` chained
+- `getTabInfo` on an attachable tab
 - `getSourceAt` / `getNetworkRequest`
-- safety overlay の発火 (危険ラベルのボタン)
+- Safety overlay firing for risky labels
 
 ## Approach
-リリース後に `claude mcp add` で登録、Claude に「example.com を新タブで開いてフォームに入力してくれ」みたいな実タスクを投げて挙動を観察する。
+After releasing, run `claude mcp add` and have Claude perform a real task ("open example.com in a new tab and fill the form"); observe the resulting behaviour.
 
 ## Steps
-- [ ] release-v0.1.0 完了
+- [ ] release-v0.1.0 finished
 - [ ] `claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest`
-- [ ] テスト用ページを開く (httpbin.org/forms/post など)
-- [ ] Claude に「listTabs → getInteractables → type → click submit」を依頼、overlay 発火を確認
-- [ ] cross-origin navigate を依頼、overlay 発火を確認
-- [ ] 取得できたバグ/改善点を docs/PROJECT.md の Decisions に追加 or 次タスク化
+- [ ] Open a test page (e.g. httpbin.org/forms/post)
+- [ ] Ask Claude: listTabs → getInteractables → type → click submit, and confirm the overlay fires
+- [ ] Ask Claude to perform a cross-origin navigate and confirm the overlay fires
+- [ ] Record any bugs/fix-ups in `docs/PROJECT.md` Decisions, or spin them into the next task
 
 ## Notes
-- 失敗パターンが見つかったら e2e.mjs にもケースを追加して回帰検知できる状態にする。
+- For each failure mode found, add a case to `scripts/e2e.mjs` so it stays covered going forward.

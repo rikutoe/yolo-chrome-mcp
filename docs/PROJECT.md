@@ -3,32 +3,32 @@
 ## Overview
 
 ### Purpose
-AI が「いま自分が開いている Chrome のどのタブでも」見て・触って・デバッグできる MCP サーバを提供する。Playwright/Puppeteer 系のように別 Chrome を立ち上げるのではなく、**ログイン済みの本物のセッションのまま** AI に渡すのが核。
+An MCP server that lets an AI see, touch, and debug **any tab in the Chrome you're already using**. Unlike Playwright/Puppeteer-based MCPs that spawn a fresh browser, this one rides on top of your **already-logged-in real session**.
 
 ### Background
-既存 Chrome MCP は「読みだけ強い / ログイン状態が引き継げない / Console や Network が断片的」など用途ごとに穴がある。普段の作業で「このタブ Claude に見せて触らせたい」が成立しない。
+Existing Chrome MCPs each have gaps: read-only, can't carry over login state, or expose only fragments of console/network. None of them satisfy "let Claude look at this tab I'm on and operate it."
 
 ### Goal
-- 17 ツールが Claude Code から実 Chrome タブで動作する ✅
-- 危険操作は in-tab 確認オーバーレイで止まる ✅
-- 配布3経路 (npm/npx・MCPB・GitHub Release zip) が稼働 ✅
-- v0.1.0 が npm に publish され、他人が `claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest` で使える
+- 17 tools work against a real Chrome tab from Claude Code ✅
+- Destructive actions are gated by an in-tab confirmation overlay ✅
+- Three distribution channels (npm/npx, MCPB, GitHub Release zip) are operational ✅
+- v0.1.0 published to npm so anyone can run `claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest`
 
 ### Out of Scope
-- 複数 Chrome プロファイル / 別ユーザーセッション切り替え
-- ヘッドレス Chrome の起動 (本 MCP は "ユーザーが今使っている Chrome" 専用)
-- Chrome Web Store 公開 (当面は GitHub Release zip + unpacked load)
+- Multiple Chrome profiles / switching user sessions
+- Headless Chrome (this MCP targets the Chrome the user is already using)
+- Chrome Web Store listing (for now: GitHub Release zip + unpacked load)
 
 ## Current Phase
-- Phase 1: 実装 (拡張 + MCP + safety overlay) ✅
-- Phase 2: 配布パイプライン構築 (npm + MCPB + Actions) ✅
-- **Phase 3: 初回公開リリース** ← current
-- Phase 4: 採用と改善 (追加ツール、Web Store 公開、ドキュメント整備)
+- Phase 1: Implementation (extension + MCP server + safety overlay) ✅
+- Phase 2: Distribution pipeline (npm + MCPB + Actions) ✅
+- **Phase 3: First public release** ← current
+- Phase 4: Adoption and improvement (more tools, Web Store, deeper docs)
 
 ## Next
-- [ ] `NPM_TOKEN` を repo Settings → Secrets に追加
-- [ ] `git tag v0.1.0 && git push origin v0.1.0` で Actions を走らせ npm publish + GitHub Release を完走させる
-- [ ] Rikuto の Claude Code 経由で 17 ツール全件 E2E (click/type/navigate含む) を実行し、動作証跡を残す
+- [ ] Add `NPM_TOKEN` to repo Settings → Secrets
+- [ ] `git tag v0.1.0 && git push origin v0.1.0` to run the release workflow (npm publish + GitHub Release)
+- [ ] Run the full 17-tool E2E (including click/type/navigate) from Rikuto's Claude Code and record evidence
 
 ## Architecture
 
@@ -37,49 +37,49 @@ Claude ⇄ stdio ⇄ MCP server (Node)  ⇄ ws://127.0.0.1:8765 ⇄ Chrome exten
                                                               └── chrome.debugger (CDP) → tab
 ```
 
-### ディレクトリ
+### Directory layout
 
 ```
-server/                Node + TypeScript MCP サーバ
-  src/index.ts         エントリ + CLI サブコマンド (install/--version/--help)
-  src/bridge.ts        ext との WS hub (1接続)
-  src/tools.ts         17 ツール定義 (zod スキーマ)
-  src/install.ts       `npx yolo-chrome-mcp install` ヘルパー
-  src/zodToJsonSchema.ts  軽量変換器 (依存ゼロ)
-  prepack.mjs          publish 前に ../extension/dist を ./extension にコピー
+server/                Node + TypeScript MCP server
+  src/index.ts         Entry + CLI subcommands (install/--version/--help)
+  src/bridge.ts        Single-client WS hub to the extension
+  src/tools.ts         17 tool definitions (zod schemas)
+  src/install.ts       `npx yolo-chrome-mcp install` helper
+  src/zodToJsonSchema.ts  Minimal converter (no extra dep)
+  prepack.mjs          Copies ../extension/dist into ./extension before publish
 
-extension/             MV3 Chrome 拡張
+extension/             MV3 Chrome extension
   manifest.json        permissions: tabs/debugger/storage/scripting/cookies/alarms
-  src/background.ts    WS クライアント + ハンドラルーティング + alarms キープアライブ
-  src/cdp.ts           chrome.debugger 薄ラッパ
-  src/session.ts       per-tab CDP attach + console/network リングバッファ
-  src/handlers.ts      17 ツールのハンドラ実装
-  src/safety.ts        危険操作判定 (label / submit / cross-origin / etc.)
-  src/overlay.ts       in-tab 確認オーバーレイ (Shadow DOM)
-  src/overlayBridge.ts overlay を inject → メッセージ送受信
-  src/popup.ts         拡張ポップアップ (接続状態 + safety mode)
-  build.mjs            esbuild バンドル
+  src/background.ts    WS client + handler routing + alarms keepalive
+  src/cdp.ts           Thin chrome.debugger wrapper
+  src/session.ts       Per-tab CDP attach + console/network ring buffers
+  src/handlers.ts      Handler implementations for all 17 tools
+  src/safety.ts        Risky-action classifier (label / submit / cross-origin / etc.)
+  src/overlay.ts       In-tab confirmation overlay (Shadow DOM)
+  src/overlayBridge.ts Injects overlay.js then round-trips a yes/no message
+  src/popup.ts         Extension popup (connection status + safety mode)
+  build.mjs            esbuild bundler
 
-shared/                ワイヤプロトコル型 (現状未使用; server/extension 内に inline 複製)
+shared/                Wire protocol types (unused at the moment; types are inlined in server/extension)
 
-mcpb/manifest.json     Claude Desktop MCPB バンドル用 manifest
-scripts/build-mcpb.mjs  build/yolo-chrome-mcp-*.mcpb を生成
-scripts/e2e.mjs        stdio 経由でツールを叩く E2E ドライバ
-.github/workflows/release.yml  タグ push で npm publish + GitHub Release
+mcpb/manifest.json     Manifest for the Claude Desktop MCPB bundle
+scripts/build-mcpb.mjs Produces build/yolo-chrome-mcp-*.mcpb
+scripts/e2e.mjs        Stdio E2E driver that exercises tools
+.github/workflows/release.yml  Tag-push → npm publish + GitHub Release
 ```
 
-### 重要なデータ構造
-- **stableId**: `getInteractables` が返す要素 ID。`n{backendNodeId}` の形式。`click`/`type` の引数として使う。AI に座標を意識させない。
-- **リングバッファ**: console/network 各 500 件。CDP イベントが発火する度に push、上限超過で先頭から捨てる。
-- **safety mode**: `always` / `dangerous-only` (default) / `off`。chrome.storage.local に永続化。
+### Key data shapes
+- **stableId**: ID returned by `getInteractables`, formatted as `n{backendNodeId}`. Used as the argument to `click` / `type`. AI never deals with coordinates.
+- **Ring buffers**: 500 entries each for console and network. CDP events push into them; oldest entries are dropped when full.
+- **Safety mode**: `always` / `dangerous-only` (default) / `off`. Persisted in `chrome.storage.local`.
 
 ## Decisions
 
-- **D1: 拡張へのタブ opt-in トグルを作らない** — Rikuto の方針は「AIに丸ごと渡して AI に考えさせる」。代わりに危険操作だけ overlay で確認。(2026-05-14)
-- **D2: ツールは粒度を分けて段階制 (Stage 1–5)** — 一発スナップショット系はコンテクストを浪費する。MCP の `instructions` で標準フロー (listTabs → 視認系1つ → 構造/深掘り) を提示する。(2026-05-14)
-- **D3: DOM は accessibility tree から interactables だけ抽出** — 生 DOM ダンプは渡さない。role/label/stableId/座標で十分。(2026-05-14)
-- **D4: WS は単一クライアント (last writer wins)** — 拡張 ↔ MCP は 1:1 接続。同時複数 Claude セッションは想定しない (将来必要なら sub-channel)。(2026-05-14)
-- **D5: shared/ ワークスペースは作ったが現状未使用** — TypeScript の rootDir/paths が monorepo で噛み合わず、サーバと拡張で型を inline 複製した。後で本格的に共有が必要になったら整理する。(2026-05-14)
-- **D6: MV3 SW のキープアライブは `chrome.alarms` 15秒間隔** — Offscreen Document は今回避けた (拡張権限が増える)。alarm 発火時に socket 切れていたら reconnect。(2026-05-14)
-- **D7: 配布は3経路** — npm/npx (Claude Code 想定)、MCPB (Claude Desktop)、GitHub Release zip (拡張のみ手動)。Chrome Web Store は公開審査を待たない。(2026-05-14)
-- **D8: ルート package 名は `yolo-chrome-mcp-monorepo`** — npm publish 対象の `server/` パッケージ名 `yolo-chrome-mcp` と衝突して `npm run -w` がおかしくなったため。(2026-05-14)
+- **D1: No tab opt-in toggle in the extension** — Rikuto's stance is "hand AI the whole thing and let it figure it out." Risky actions are gated by the overlay instead. (2026-05-14)
+- **D2: Tools are split by granularity into stages 1–5** — Single-shot snapshot tools waste context. The MCP `instructions` field nudges the standard flow (listTabs → one visual tool → structure/drill-down). (2026-05-14)
+- **D3: DOM is exposed as accessibility-tree interactables, not raw HTML** — role/label/stableId/coords are enough. (2026-05-14)
+- **D4: WS is single-client (last writer wins)** — One 1:1 connection between extension and MCP server. Concurrent Claude sessions are out of scope for now. (2026-05-14)
+- **D5: shared/ workspace exists but is unused** — TypeScript rootDir/paths fought with the monorepo, so types are duplicated inline in server and extension. Revisit if we genuinely need to share more code. (2026-05-14)
+- **D6: MV3 service worker keepalive via `chrome.alarms` every 15s** — Avoids needing an offscreen document (and the extra permission). On each alarm, reconnect if the socket is dead. (2026-05-14)
+- **D7: Three distribution paths** — npm/npx (Claude Code), MCPB (Claude Desktop), GitHub Release zip (extension only, manual). Don't wait on Chrome Web Store review. (2026-05-14)
+- **D8: Root package is named `yolo-chrome-mcp-monorepo`** — Clashed with the publishable `server/` package name `yolo-chrome-mcp` and broke `npm run -w`. (2026-05-14)
