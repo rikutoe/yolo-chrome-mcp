@@ -146,16 +146,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const r = await rpc("tools/list");
     const names = r.result.tools.map((t) => t.name).sort();
     const expected = [
-      "click", "evalJs", "getConsoleLogs", "getInteractables",
-      "getNetworkActivity", "getNetworkRequest", "getPageText",
-      "getSourceAt", "getStorage", "getTabInfo", "listTabs",
-      "navigate", "screenshot", "scroll", "setSafetyMode",
+      "click", "closeTab", "createTab", "evalJs", "getConsoleLogs",
+      "getInteractables", "getNetworkActivity", "getNetworkRequest",
+      "getPageText", "getSourceAt", "getStorage", "getTabInfo",
+      "listTabs", "navigate", "screenshot", "scroll", "setSafetyMode",
       "type", "waitForStable",
     ];
     const missing = expected.filter((n) => !names.includes(n));
     if (missing.length) throw new Error(`missing tools: ${missing.join(",")}`);
     if (names.length !== expected.length) {
-      throw new Error(`expected 17 tools, got ${names.length}: extras=${names.filter((n) => !expected.includes(n)).join(",")}`);
+      throw new Error(`expected ${expected.length} tools, got ${names.length}: extras=${names.filter((n) => !expected.includes(n)).join(",")}`);
     }
     return { count: names.length };
   });
@@ -209,6 +209,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     callTool("waitForStable", { tabId, timeout: 8000 })
   );
   await sleep(500); // small settle
+
+  // 6b. createTab + closeTab round-trip
+  await step("createTab + closeTab", async () => {
+    const created = await callTool("createTab", {
+      url: "about:blank",
+      active: false,
+    });
+    if (typeof created.id !== "number") throw new Error("createTab did not return id");
+    const tabsNow = await callTool("listTabs", {});
+    if (!tabsNow.some((t) => t.id === created.id)) {
+      throw new Error("new tab not visible in listTabs");
+    }
+    const closed = await callTool("closeTab", { tabIds: created.id });
+    if (!Array.isArray(closed.closed) || closed.closed[0] !== created.id) {
+      throw new Error(`closeTab returned ${JSON.stringify(closed)}`);
+    }
+    await sleep(200);
+    const tabsAfter = await callTool("listTabs", {});
+    if (tabsAfter.some((t) => t.id === created.id)) {
+      throw new Error("tab still present after closeTab");
+    }
+    return { createdId: created.id };
+  });
 
   // 7. Stage 1
   await step("getTabInfo (example.com)", async () => {

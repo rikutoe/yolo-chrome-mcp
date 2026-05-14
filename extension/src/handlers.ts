@@ -482,6 +482,37 @@ export async function navigate({ tabId, url }: { tabId: number; url: string }) {
   return { ok: true };
 }
 
+export async function createTab({
+  url,
+  active,
+  windowId,
+}: {
+  url: string;
+  active?: boolean;
+  windowId?: number;
+}) {
+  const t = await chrome.tabs.create({
+    url,
+    active: active ?? true,
+    ...(windowId !== undefined ? { windowId } : {}),
+  });
+  return {
+    id: t.id,
+    title: t.title,
+    url: t.url,
+    active: t.active,
+    windowId: t.windowId,
+    incognito: t.incognito,
+    status: t.status,
+  };
+}
+
+export async function closeTab({ tabIds }: { tabIds: number | number[] }) {
+  const ids = Array.isArray(tabIds) ? tabIds : [tabIds];
+  await chrome.tabs.remove(ids);
+  return { closed: ids };
+}
+
 export async function evalJs({
   tabId,
   expression,

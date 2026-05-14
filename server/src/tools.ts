@@ -185,6 +185,36 @@ export const tools: ToolDef[] = [
     handler: (b, i) => b.call("navigate", i, 30000),
   },
   {
+    name: "createTab",
+    description:
+      "Open a NEW Chrome tab at the given URL and return its tab info. Use this instead of navigate when you want to keep the current tab as-is.",
+    inputSchema: z.object({
+      url: z.string().url(),
+      active: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Whether the new tab should become the foreground tab. Default true."),
+      windowId: z
+        .number()
+        .int()
+        .optional()
+        .describe("Open the tab in a specific window. Defaults to the focused window."),
+    }),
+    handler: (b, i) => b.call("createTab", i, 15000),
+  },
+  {
+    name: "closeTab",
+    description:
+      "Close one or more Chrome tabs by id. Returns the ids that were closed.",
+    inputSchema: z.object({
+      tabIds: z
+        .union([z.number().int(), z.array(z.number().int()).min(1)])
+        .describe("Single tabId or an array of tabIds to close."),
+    }),
+    handler: (b, i) => b.call("closeTab", i, 15000),
+  },
+  {
     name: "evalJs",
     description:
       "Evaluate a JavaScript expression in the tab's main world and return the result (JSON-serialized). Last-resort escape hatch — destructive expressions go through the safety overlay.",

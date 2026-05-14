@@ -20,6 +20,8 @@ const handlers: Record<string, (params: any) => Promise<any>> = {
   type: (p) => h.typeText(p),
   scroll: (p) => h.scroll(p),
   navigate: (p) => h.navigate(p),
+  createTab: (p) => h.createTab(p),
+  closeTab: (p) => h.closeTab(p),
   evalJs: (p) => h.evalJs(p),
   waitForStable: (p) => h.waitForStable(p),
   setSafetyMode: (p) => h.setSafetyMode(p),
