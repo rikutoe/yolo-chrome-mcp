@@ -34,6 +34,10 @@ interface TabState {
   console: ConsoleEntry[];
   network: NetworkEntry[];
   inflight: number;
+  // ms timestamp of the most recent Network.* event. waitForStable uses a sliding-window
+  // "no network activity for N ms" check rather than "inflight==0", so persistent long-poll
+  // / SSE / websocket connections on the page do not block stabilization.
+  lastNetworkAt: number;
   lastIdleResolvers: Array<() => void>;
   idleTimer?: any;
 }
@@ -43,7 +47,13 @@ const tabs = new Map<number, TabState>();
 function ensureTab(tabId: number): TabState {
   let s = tabs.get(tabId);
   if (!s) {
-    s = { console: [], network: [], inflight: 0, lastIdleResolvers: [] };
+    s = {
+      console: [],
+      network: [],
+      inflight: 0,
+      lastNetworkAt: 0,
+      lastIdleResolvers: [],
+    };
     tabs.set(tabId, s);
   }
   return s;
@@ -73,6 +83,7 @@ function installGlobalListener() {
 }
 
 function handleCdpEvent(s: TabState, _tabId: number, method: string, p: any) {
+  if (method.startsWith("Network.")) s.lastNetworkAt = Date.now();
   switch (method) {
     case "Runtime.consoleAPICalled": {
       push(
@@ -175,17 +186,26 @@ function handleCdpEvent(s: TabState, _tabId: number, method: string, p: any) {
 
 function bumpInflight(s: TabState, delta: number) {
   s.inflight = Math.max(0, s.inflight + delta);
-  if (s.inflight === 0) scheduleIdle(s);
+  scheduleIdle(s);
 }
 
+const IDLE_QUIET_MS = 500;
+
+// "Idle" means no Network.* events for IDLE_QUIET_MS, regardless of inflight count.
+// This makes waitForStable robust to long-lived SSE / websocket / long-poll connections
+// that are a normal part of modern apps (Gmail, Calendar, X, etc.) — their persistent
+// requests never call loadingFinished, so the old inflight==0 check would never fire.
 function scheduleIdle(s: TabState) {
   if (s.idleTimer) clearTimeout(s.idleTimer);
   s.idleTimer = setTimeout(() => {
-    if (s.inflight === 0) {
+    if (Date.now() - s.lastNetworkAt >= IDLE_QUIET_MS) {
       const list = s.lastIdleResolvers.splice(0);
       for (const r of list) r();
+    } else {
+      // A late event landed — reschedule.
+      scheduleIdle(s);
     }
-  }, 500);
+  }, IDLE_QUIET_MS);
 }
 
 export async function ensureAttached(tabId: number): Promise<TabState> {
@@ -211,9 +231,12 @@ export function getState(tabId: number): TabState | undefined {
 export function waitForIdle(tabId: number, timeoutMs: number): Promise<"idle" | "timeout"> {
   const s = ensureTab(tabId);
   return new Promise((resolve) => {
-    if (s.inflight === 0) {
-      scheduleIdle(s);
+    // If the network has already been quiet for IDLE_QUIET_MS, resolve immediately.
+    if (s.lastNetworkAt === 0 || Date.now() - s.lastNetworkAt >= IDLE_QUIET_MS) {
+      resolve("idle");
+      return;
     }
+    scheduleIdle(s);
     const onIdle = () => {
       clearTimeout(t);
       resolve("idle");
