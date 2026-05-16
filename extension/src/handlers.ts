@@ -126,7 +126,50 @@ interface InteractableNode {
   href?: string;
 }
 
-const nodeMaps = new Map<number, Map<string, { backendNodeId: number; objectId?: string }>>();
+interface CachedNode {
+  backendNodeId: number;
+  objectId?: string;
+  // Cached so click/type can skip DOM.describeNode and DOM.getBoxModel round-trips.
+  label?: string;
+  role?: string;
+  bounds?: { x: number; y: number; width: number; height: number };
+  inViewport?: boolean;
+}
+
+const nodeMaps = new Map<number, Map<string, CachedNode>>();
+
+const INTERACTIVE_ROLES = new Set([
+  "button",
+  "link",
+  "textbox",
+  "searchbox",
+  "checkbox",
+  "radio",
+  "combobox",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "tab",
+  "switch",
+  "slider",
+  "spinbutton",
+  "option",
+]);
+
+function originOf(url?: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+function flattenFrameTree(node: any): any[] {
+  const out: any[] = [node];
+  for (const c of node.childFrames ?? []) out.push(...flattenFrameTree(c));
+  return out;
+}
 
 export async function getInteractables({
   tabId,
@@ -138,27 +181,14 @@ export async function getInteractables({
   limit?: number;
 }) {
   await ensureAttached(tabId);
-  const ax: any = await cdp.send(tabId, "Accessibility.getFullAXTree");
-  const nodes: any[] = ax.nodes ?? [];
 
-  const interactiveRoles = new Set([
-    "button",
-    "link",
-    "textbox",
-    "searchbox",
-    "checkbox",
-    "radio",
-    "combobox",
-    "menuitem",
-    "tab",
-    "switch",
-    "slider",
-    "spinbutton",
-    "option",
+  // Kick off independent fetches in parallel: AX tree, layout metrics, frame tree.
+  const [axMain, layoutVp, frameTree]: any[] = await Promise.all([
+    cdp.send(tabId, "Accessibility.getFullAXTree"),
+    cdp.send(tabId, "Page.getLayoutMetrics"),
+    cdp.send(tabId, "Page.getFrameTree").catch(() => null),
   ]);
 
-  // Map AXNode -> backendNodeId.
-  const layoutVp: any = await cdp.send(tabId, "Page.getLayoutMetrics");
   const vw = layoutVp.cssVisualViewport ?? layoutVp.visualViewport;
   const viewportRect = {
     x: vw.pageX ?? 0,
@@ -167,37 +197,115 @@ export async function getInteractables({
     h: vw.clientHeight ?? 720,
   };
 
-  const out: InteractableNode[] = [];
-  const map = new Map<string, { backendNodeId: number; objectId?: string }>();
+  // Walk frames so we can attempt same-origin AX merging and report the cross-origin ones.
+  const allFrames = frameTree?.frameTree ? flattenFrameTree(frameTree.frameTree) : [];
+  const mainOrigin = originOf(frameTree?.frameTree?.frame?.url);
+  const subFrames = allFrames.slice(1); // exclude the main frame
 
-  for (const n of nodes) {
-    const role = n.role?.value;
-    if (!role || !interactiveRoles.has(role)) continue;
-    if (n.ignored) continue;
-    const backendNodeId: number | undefined = n.backendDOMNodeId;
-    if (!backendNodeId) continue;
-    const label =
-      n.name?.value ??
-      n.description?.value ??
-      (n.properties ?? [])
-        .filter((p: any) => p.name === "value")
-        .map((p: any) => String(p.value?.value ?? ""))
-        .join(" ");
-    const stableId = `n${backendNodeId}`;
+  // Try the AX tree for each subframe in parallel. Cross-origin (OOP) frames usually error
+  // or return zero interactive nodes — we surface that to the caller.
+  const subFrameAxResults = await Promise.all(
+    subFrames.map(async (f) => {
+      const frameUrl: string = f.frame.url ?? "";
+      const frameOrigin = originOf(frameUrl);
+      // Same-origin frames live in the same render process, so the AX tree is reachable.
+      try {
+        const ax: any = await cdp.send(tabId, "Accessibility.getFullAXTree", {
+          frameId: f.frame.id,
+        });
+        return {
+          frameId: f.frame.id,
+          url: frameUrl,
+          origin: frameOrigin,
+          nodes: ax.nodes ?? [],
+          accessible: true as const,
+          sameOrigin: !!mainOrigin && frameOrigin === mainOrigin,
+        };
+      } catch (err: any) {
+        return {
+          frameId: f.frame.id,
+          url: frameUrl,
+          origin: frameOrigin,
+          nodes: [] as any[],
+          accessible: false as const,
+          sameOrigin: !!mainOrigin && frameOrigin === mainOrigin,
+          error: err?.message,
+        };
+      }
+    })
+  );
+
+  // Collect candidate nodes from main + any AX-accessible subframes.
+  type Candidate = {
+    backendNodeId: number;
+    role: string;
+    label: string;
+    frameId?: string;
+  };
+  const candidates: Candidate[] = [];
+  const seen = new Set<number>();
+
+  const collect = (axNodes: any[], frameId?: string) => {
+    for (const n of axNodes) {
+      const role = n.role?.value;
+      if (!role || !INTERACTIVE_ROLES.has(role)) continue;
+      if (n.ignored) continue;
+      const backendNodeId: number | undefined = n.backendDOMNodeId;
+      if (!backendNodeId || seen.has(backendNodeId)) continue;
+      const label =
+        n.name?.value ??
+        n.description?.value ??
+        (n.properties ?? [])
+          .filter((p: any) => p.name === "value")
+          .map((p: any) => String(p.value?.value ?? ""))
+          .join(" ");
+      seen.add(backendNodeId);
+      candidates.push({
+        backendNodeId,
+        role,
+        label: (label ?? "").slice(0, 200),
+        frameId,
+      });
+    }
+  };
+
+  collect(axMain.nodes ?? []);
+  for (const sf of subFrameAxResults) {
+    if (sf.accessible) collect(sf.nodes, sf.frameId);
+  }
+
+  // Bulk-fetch box models in parallel. This is the big win vs the previous sequential loop
+  // — for 100 candidates we go from 100 round-trips to (effectively) 1.
+  const boxResults = await Promise.all(
+    candidates.map((c) =>
+      cdp
+        .send(tabId, "DOM.getBoxModel", { backendNodeId: c.backendNodeId })
+        .then(
+          (b: any) => ({ ok: true as const, box: b }),
+          (err: any) => ({ ok: false as const, err })
+        )
+    )
+  );
+
+  const out: InteractableNode[] = [];
+  const map = new Map<string, CachedNode>();
+  const max = limit ?? 100;
+  const wantAll = (viewport ?? "visible") === "all";
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const br = boxResults[i];
     let bounds:
       | { x: number; y: number; width: number; height: number }
       | undefined;
-    try {
-      const box: any = await cdp.send(tabId, "DOM.getBoxModel", { backendNodeId });
-      const [x1, y1, x2, , , y3] = box.model.border as number[];
+    if (br.ok && br.box?.model?.border) {
+      const [x1, y1, x2, , , y3] = br.box.model.border as number[];
       bounds = {
         x: Math.round(x1),
         y: Math.round(y1),
         width: Math.round(x2 - x1),
         height: Math.round(y3 - y1),
       };
-    } catch {
-      // Non-rendered (display:none, etc.) — skip when only visible requested.
     }
     const inViewport = !!(
       bounds &&
@@ -206,23 +314,49 @@ export async function getInteractables({
       bounds.y + bounds.height > viewportRect.y &&
       bounds.y < viewportRect.y + viewportRect.h
     );
-    if ((viewport ?? "visible") === "visible" && (!bounds || !inViewport)) continue;
-    map.set(stableId, { backendNodeId });
+    if (!wantAll && (!bounds || !inViewport)) continue;
+    const stableId = `n${c.backendNodeId}`;
+    map.set(stableId, {
+      backendNodeId: c.backendNodeId,
+      label: c.label,
+      role: c.role,
+      bounds,
+      inViewport,
+    });
     out.push({
       stableId,
-      role,
-      label: (label ?? "").slice(0, 200),
+      role: c.role,
+      label: c.label,
       tag: undefined,
       bounds,
       inViewport,
     });
-    if (out.length >= (limit ?? 100)) break;
+    if (out.length >= max) break;
   }
   nodeMaps.set(tabId, map);
-  return { nodes: out, viewport: viewportRect };
+
+  // Report frames so the AI doesn't waste round-trips on evalJs spelunking when a page
+  // is iframe-heavy. `accessible: false` is the loud signal that content is unreachable.
+  const frames = subFrameAxResults.map((sf) => ({
+    frameId: sf.frameId,
+    url: sf.url,
+    origin: sf.origin,
+    sameOrigin: sf.sameOrigin,
+    accessible: sf.accessible,
+    interactableCount: sf.nodes.filter(
+      (n: any) => n.role?.value && INTERACTIVE_ROLES.has(n.role.value) && !n.ignored
+    ).length,
+  }));
+  const blockedFrames = frames.filter((f) => !f.accessible);
+  const note =
+    blockedFrames.length > 0
+      ? `${blockedFrames.length} cross-origin iframe(s) are not reachable — their interactables are NOT in this list. Do not use evalJs to probe them; they are isolated by Chrome.`
+      : undefined;
+
+  return { nodes: out, viewport: viewportRect, frames, note };
 }
 
-function getNode(tabId: number, stableId: string) {
+function getNode(tabId: number, stableId: string): CachedNode {
   const m = nodeMaps.get(tabId);
   const n = m?.get(stableId);
   if (!n) {
@@ -401,14 +535,39 @@ export async function getSourceAt({
 
 export async function click({ tabId, stableId }: { tabId: number; stableId: string }) {
   const n = getNode(tabId, stableId);
-  const decision = await maybeConfirm(tabId, "click", { stableId });
+  // Pass cached label/role so the safety classifier can skip a DOM.describeNode round-trip
+  // when the label is obviously not money/destructive.
+  const decision = await maybeConfirm(tabId, "click", {
+    stableId,
+    cachedLabel: n.label,
+    cachedRole: n.role,
+  });
   if (decision === "denied") return { ok: false, reason: "user-denied" };
+
+  // Fast path: element was reported in the viewport on the last getInteractables call,
+  // so we can dispatch the click using cached bounds — no scrollIntoView, no second
+  // DOM.getBoxModel round-trip. This is the common case and saves 2 round-trips per click.
+  if (n.inViewport && n.bounds) {
+    const cx = n.bounds.x + n.bounds.width / 2;
+    const cy = n.bounds.y + n.bounds.height / 2;
+    await dispatchClick(tabId, cx, cy);
+    return { ok: true, x: cx, y: cy };
+  }
+
   await scrollIntoView(tabId, n.backendNodeId);
   const box: any = await cdp.send(tabId, "DOM.getBoxModel", { backendNodeId: n.backendNodeId });
   const [x1, y1, x2, , , y3] = box.model.border as number[];
   const cx = (x1 + x2) / 2;
   const cy = (y1 + y3) / 2;
   await dispatchClick(tabId, cx, cy);
+  // Refresh cache so a follow-up click on the same node hits the fast path.
+  n.bounds = {
+    x: Math.round(x1),
+    y: Math.round(y1),
+    width: Math.round(x2 - x1),
+    height: Math.round(y3 - y1),
+  };
+  n.inViewport = true;
   return { ok: true, x: cx, y: cy };
 }
 
@@ -426,7 +585,12 @@ export async function typeText({
   pressEnter?: boolean;
 }) {
   const n = getNode(tabId, stableId);
-  const decision = await maybeConfirm(tabId, "type", { stableId, sample: text.slice(0, 40) });
+  const decision = await maybeConfirm(tabId, "type", {
+    stableId,
+    sample: text.slice(0, 40),
+    cachedLabel: n.label,
+    cachedRole: n.role,
+  });
   if (decision === "denied") return { ok: false, reason: "user-denied" };
   await cdp.send(tabId, "DOM.focus", { backendNodeId: n.backendNodeId });
   if (clearFirst ?? true) {

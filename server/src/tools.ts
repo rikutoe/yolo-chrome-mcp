@@ -66,7 +66,7 @@ export const tools: ToolDef[] = [
     name: "getInteractables",
     description: stage(
       3,
-      "Clickable / typable / link elements as a flat list with role, label, stableId, and viewport coordinates. Built from the accessibility tree — no raw HTML. Use the stableId for click/type."
+      "Clickable / typable / link elements as a flat list with role, label, stableId, and viewport coordinates. Built from the accessibility tree — no raw HTML. Use the stableId for click/type. Response also includes a `frames` array: every iframe on the page with `accessible: true|false`. If `accessible: false`, that iframe's content is cross-origin and CANNOT be reached by ANY tool here (don't try evalJs — Chrome blocks it). When you see blocked iframes, report that to the user instead of probing further."
     ),
     inputSchema: z.object({
       tabId,
@@ -217,7 +217,7 @@ export const tools: ToolDef[] = [
   {
     name: "evalJs",
     description:
-      "Evaluate a JavaScript expression in the tab's main world and return the result (JSON-serialized). Last-resort escape hatch — destructive expressions go through the safety overlay.",
+      "Evaluate a JavaScript expression in the tab's main world and return the result (JSON-serialized). LAST RESORT — do not use for page inspection. For 'what's on this page?' use screenshot + getPageText + getInteractables (in that order). For 'why is this iframe empty?' check the `frames` field returned by getInteractables — cross-origin iframes are unreachable and evalJs will not bypass that. Only reach for evalJs when you genuinely need to run page-specific JS that no dedicated tool covers. Destructive expressions go through the safety overlay.",
     inputSchema: z.object({
       tabId,
       expression: z.string(),

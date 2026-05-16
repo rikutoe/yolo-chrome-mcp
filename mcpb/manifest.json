@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "yolo-chrome-mcp",
   "display_name": "Yolo Chrome MCP for Claude",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Observe and control any open Chrome tab from Claude. Requires loading the paired Chrome extension once.",
   "long_description": "Pairs with a Chrome extension (loaded as an unpacked extension) so Claude can list tabs, screenshot, inspect the accessibility tree, read console/network/storage, and click/type/scroll/navigate inside your real, already-logged-in Chrome session. Destructive actions trigger an in-tab confirmation overlay.",
   "author": {

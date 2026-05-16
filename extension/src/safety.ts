@@ -36,6 +36,19 @@ export async function classifyAction(
     const stableId: string = details.stableId;
     const backendNodeId = Number(stableId.slice(1));
     if (!Number.isFinite(backendNodeId)) return false;
+    // Fast path: the cached AX label from getInteractables already covers most pages.
+    // Only fall through to DOM.describeNode if the cached label looks suspicious — saves
+    // one round-trip per click on the overwhelmingly common "safe button" case.
+    const cachedLabel: string = details.cachedLabel ?? "";
+    const cachedRole: string = details.cachedRole ?? "";
+    const cachedLooksRisky =
+      MONEY_LABEL_PATTERNS.some((re) => re.test(cachedLabel)) ||
+      DESTRUCTIVE_LABEL_PATTERNS.some((re) => re.test(cachedLabel));
+    if (cachedLooksRisky) return true;
+    // For non-button roles (link, tab, option, checkbox, etc.) the cached AX label is
+    // authoritative — those don't sit in password forms, so we can short-circuit here.
+    const needsDomCheck = cachedRole === "button" || cachedRole === "" || !cachedRole;
+    if (!needsDomCheck) return false;
     try {
       const desc: any = await cdp.send(tabId, "DOM.describeNode", { backendNodeId, depth: 0 });
       const node = desc.node;
@@ -45,6 +58,7 @@ export async function classifyAction(
       for (let i = 0; i < attrs.length; i += 2) attrMap[attrs[i]] = attrs[i + 1];
       const corpus = [
         text,
+        cachedLabel,
         attrMap["value"] ?? "",
         attrMap["aria-label"] ?? "",
         attrMap["title"] ?? "",
@@ -65,6 +79,10 @@ export async function classifyAction(
     // クレジットカード番号らしい値、またはパスワード input への入力は確認。
     if (/\b\d{13,19}\b/.test(String(details.sample ?? details.text ?? ""))) return true;
     const stableId: string | undefined = details.stableId;
+    // Most inputs come back as `textbox` from the AX tree — only password fields show up
+    // as something else worth investigating. We still need DOM.describeNode to read the
+    // `type=password` / `autocomplete=cc-*` attributes, but only when the role suggests it
+    // could be sensitive.
     if (stableId) {
       const backendNodeId = Number(stableId.slice(1));
       if (Number.isFinite(backendNodeId)) {
