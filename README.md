@@ -10,6 +10,20 @@ Expose every open Chrome tab to an MCP server so AIs can browse, debug, and oper
 
 You need both halves: the MCP server (driven by Claude) and the Chrome extension (loaded once into your Chrome).
 
+### Option A0 — Chrome Web Store + one-liner (when the listing is live)
+
+If you installed the extension from the Chrome Web Store, you still need the
+local MCP server. Run this once (the extension popup shows the same command
+with a "Copy" button when its status dot is red):
+
+```bash
+claude mcp add --scope user yolo-chrome -- npx -y yolo-chrome-mcp@latest \
+  && npx -y yolo-chrome-mcp@latest install --routing-only
+```
+
+This registers the server with Claude Code and installs the PreToolUse hook +
+`~/.claude/CLAUDE.md` rule. Restart Claude Code and the popup turns green.
+
 ### Option A — Claude Code (npx, recommended)
 
 ```bash

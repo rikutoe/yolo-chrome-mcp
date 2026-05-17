@@ -4,6 +4,10 @@ const sub = document.getElementById("sub")!;
 const reconnect = document.getElementById("reconnect")!;
 const modeHint = document.getElementById("modeHint")!;
 const versionEl = document.getElementById("version")!;
+const setupCard = document.getElementById("setupCard")! as HTMLDivElement;
+const cmdBlock = document.getElementById("cmdBlock")! as HTMLPreElement;
+const copyCmd = document.getElementById("copyCmd")!;
+const copyLabel = document.getElementById("copyLabel")!;
 
 const safetyInputs = Array.from(
   document.querySelectorAll<HTMLInputElement>('input[name="safety"]')
@@ -16,22 +20,22 @@ const HINTS: Record<string, string> = {
   off: "確認なしですべて自動実行します。注意して使ってください。",
 };
 
+function setConnected(connected: boolean, subtext: string) {
+  dot.className = connected ? "dot on" : "dot";
+  text.textContent = connected ? "接続中" : "未接続";
+  sub.textContent = subtext;
+  setupCard.hidden = connected;
+}
+
 async function refresh() {
   try {
     const r = await chrome.runtime.sendMessage({ type: "status" });
-    if (r?.connected) {
-      dot.className = "dot on";
-      text.textContent = "接続中";
-      sub.textContent = "MCP サーバと通信できます";
-    } else {
-      dot.className = "dot";
-      text.textContent = "未接続";
-      sub.textContent = "MCP サーバを起動してください";
-    }
+    setConnected(
+      !!r?.connected,
+      r?.connected ? "MCP サーバと通信できます" : "下のコマンドでセットアップしてください"
+    );
   } catch {
-    dot.className = "dot";
-    text.textContent = "未接続";
-    sub.textContent = "拡張機能をリロードしてください";
+    setConnected(false, "拡張機能をリロードしてください");
   }
 }
 
@@ -72,6 +76,19 @@ function setHint(mode: string) {
   reconnect.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ type: "reconnect" });
     refresh();
+  });
+
+  copyCmd.addEventListener("click", async () => {
+    const cmd = cmdBlock.textContent ?? "";
+    try {
+      await navigator.clipboard.writeText(cmd);
+      copyLabel.textContent = "コピーしました";
+    } catch {
+      copyLabel.textContent = "コピー失敗";
+    }
+    setTimeout(() => {
+      copyLabel.textContent = "コマンドをコピー";
+    }, 1500);
   });
 
   refresh();
