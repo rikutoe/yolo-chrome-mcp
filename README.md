@@ -23,6 +23,14 @@ That's it. The installer:
 
 Re-running `setup` is idempotent. To remove the hook + rule later: `npx yolo-chrome-mcp uninstall-routing`.
 
+**Already installed the extension from the Chrome Web Store?** Skip the "Load unpacked" step with:
+
+```bash
+npx -y yolo-chrome-mcp@latest setup --routing-only
+```
+
+This is the exact same command the extension popup shows (with a one-click Copy button) when its status dot is red. It auto-registers the MCP server with Claude Code and runs the routing setup, without re-opening `chrome://extensions`.
+
 ### Other clients
 
 - **Claude Desktop (MCPB one-click)** — download the latest `yolo-chrome-mcp-*.mcpb` from [Releases](https://github.com/rikutoe/yolo-chrome-mcp/releases), drag onto Claude Desktop, then load the bundle's `extension/` folder via `chrome://extensions` → Load unpacked.

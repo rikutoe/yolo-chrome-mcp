@@ -31,6 +31,16 @@ Hand any open Chrome tab to Claude. Click, type, screenshot, read console — al
 ```
 Yolo Chrome MCP turns your real, logged-in Chrome session into a tool Claude can drive.
 
+▼ IMPORTANT — this extension is one half of the system.
+After installing it, run this one command on your computer (it adds the MCP
+server to Claude and sets up routing so Claude always uses Yolo for Chrome):
+
+    npx -y yolo-chrome-mcp@latest install --routing-only
+
+Requires Node.js + Claude Code (or Claude Desktop). The extension popup also
+shows this command with a one-click "Copy" button — open it any time the
+status dot is red.
+
 Pair it with the yolo-chrome-mcp server (npm or Claude Desktop) and Claude
 can browse, click, type, screenshot, and read the console / network of any
 tab you already have open — without spawning a separate headless browser,
@@ -50,12 +60,12 @@ exact pages you are working with.
 — How it works —
 1. Install this Chrome extension. It connects to a local WebSocket on
    your computer (127.0.0.1, no external traffic).
-2. Install the yolo-chrome-mcp server with one command:
-       npx yolo-chrome-mcp install
-   This wires Claude Code (or Claude Desktop) up to the extension and
-   installs a routing rule so Claude always uses Yolo when it needs a
-   browser.
-3. Ask Claude to do something with a tab. Claude calls the server, the
+2. Run the one-line install command shown above. It registers the MCP
+   server with Claude (`claude mcp add`) and installs the routing hook
+   + CLAUDE.md rule so Claude always picks Yolo when it needs a browser.
+3. Restart Claude Code / Claude Desktop. The extension popup's dot turns
+   green once Claude spawns the server.
+4. Ask Claude to do something with a tab. Claude calls the server, the
    server forwards the call to this extension, the extension acts on
    your Chrome tab using DevTools Protocol, and the result comes back
    to Claude.
