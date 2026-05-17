@@ -38,22 +38,26 @@ Before adding the parameter, **investigate the 5s mouseMoved hang** so we can do
 
 ## Steps
 
-- [ ] **B1 — Investigate mouseMoved 5s hang**
-  - [ ] Build a minimal repro: navigate to `data:text/html,<button>x</button>`, prepend mouseMoved (button: "none", buttons: 0) before press/release, measure
-  - [ ] Try variants: `button:"left"` + `buttons:0`; omit `button` entirely; use `type:"mouseMove"` (note: spelling — CDP uses `mouseMoved`)
-  - [ ] Compare against a busy page (the bench's 200-card injection)
-  - [ ] Decide: does mouseMoved work with the right params? Or is it fundamentally broken under chrome.debugger?
-- [ ] **B2 — Implement clickStrategy**
-  - [ ] Add `clickStrategy?: "events" | "native" | "events+native"` to the `click` and `clickByLabel` tools in [server/src/tools.ts](../../server/src/tools.ts) and [extension/src/handlers.ts](../../extension/src/handlers.ts)
-  - [ ] In handlers.ts, add a `nativeClick(tabId, backendNodeId)` helper that does `DOM.resolveNode` → `Runtime.callFunctionOn` with `functionDeclaration: "function(){ this.click(); }"`
-  - [ ] When `clickStrategy === "native"` skip the mouse-event dispatch and call `nativeClick` only
-  - [ ] When `clickStrategy === "events+native"` do both
-  - [ ] Update tool descriptions: "On Web Component pages (YouTube Studio, Google Cloud Console, Workspace Admin) where a dispatch-based click visually selects but doesn't dirty the form, retry with `clickStrategy: \"native\"`."
-- [ ] **B3 — Verify on YouTube Studio**
-  - [ ] Open `https://studio.youtube.com/video/{any-monetized-channel-video}/monetization/ads`
-  - [ ] Drive: chevron click (`clickByLabel "Edit video monetization status"`) → On radio (`clickByLabel "On" roleMatch:"radio"`) → Next → None of the above → Submit
-  - [ ] Re-fetch Save button via `getInteractables({labelMatch: "Save"})`. **Pass = `disabled` flag absent**. Fail = still `disabled: true` → try `clickStrategy: "native"` and re-run.
-  - [ ] Take a screenshot of the editor showing Monetization: On + Save enabled, attach to the PR
+- [x] **B1 — Investigate mouseMoved 5s hang** *(2026-05-17, closed)*
+  - Findings: the 5s hang is **independent of `button`/`buttons` params and of page heaviness**. Measured with a temp `_mouseMode` parameter on `click` and a one-off bench (now deleted; the temp param is reverted). 8 clicks per mode on (a) a single button on example.com and (b) a 200-card injected DOM gave: `press+release` only 0.5–1.8ms; every `mouseMoved` variant — `button:"none"+buttons:0`, `"left"+0`, omitted `button`, `"left"+1` — plateaued at 5003–5012ms. The flat plateau ≈ 5s strongly implies a CDP-internal ack timeout (chrome.debugger never returns until the renderer ack is presumed lost). `type:"mouseMove"` (missing -d) was correctly rejected by CDP. Conclusion: mouseMoved via `chrome.debugger` is unusable as a click prefix; pursue `clickStrategy:"native"` instead. Recorded in PROJECT.md D18 (updated) and D22.
+- [x] **B2 — Implement clickStrategy** *(2026-05-17, closed)*
+  - `clickStrategy?: "events" | "native" | "events+native"` added to `click` and `clickByLabel` (`server/src/tools.ts`, `extension/src/handlers.ts`); default `"events"` keeps all callers unchanged.
+  - `nativeClick(tabId, backendNodeId)` helper: `DOM.resolveNode` → `Runtime.callFunctionOn` with `function(){ this.click(); }` → `Runtime.releaseObject`. Wrapped in try/finally so the Runtime handle is always freed.
+  - `"events+native"` runs the dispatch path first, then `nativeClick`. The bench probe confirms the click listener fires exactly twice in this mode.
+  - Tool descriptions updated with the "Polymer / lit (YouTube Studio, Google Cloud Console, Workspace Admin)" guidance.
+  - `scripts/bench-flow.mjs` extended with a strategy probe that injects 3 labelled buttons and clicks them with each strategy under a ~50ms / hard-ceiling 500ms per-click budget. Verifies counter is `events:1, native:1, both:2`.
+- [~] **B3 — Verify on YouTube Studio** *(2026-05-17, partially closed)*
+  - `scripts/yt-studio-probe.mjs` (new, retained) drives a non-destructive dirty-state probe: opens the monetization page, verifies Save starts disabled, toggles the "Show mid-roll ads" checkbox with the chosen strategy, re-checks Save's `disabled` flag, then exits (tab is left dirty; caller closes it to discard).
+  - Results on `https://studio.youtube.com/video/Ovtl9NXrpkg/monetization/ads`:
+    - `STRATEGY=events`: Save disabled → enabled, checkbox `checked:true → false`, click took 51ms
+    - `STRATEGY=native`: Save disabled → enabled, checkbox `checked:true → false`, click took 20ms
+  - Both strategies dirtied the form for this checkbox — meaning this specific control isn't the failing Polymer code path. The original bug report (PROJECT.md D18) was about the **Monetization-radio + modal-Submit** flow specifically, which would require toggling the video's monetization state to test definitively. Out of scope for autonomous execution per task notes ("don't actually toggle monetization on a real video without his go-ahead"). The escape hatch is verified mechanically (bench-flow) and against a real Polymer control (yt-studio-probe).
+  - Follow-up (tracked in `docs/tasks.md`): Rikuto to run the Monetization-radio flow manually once a video is in a state where the toggle is acceptable. Suggested incantation:
+    ```
+    TAB_ID=<monetization tab> STRATEGY=native CHECKBOX_LABEL="Edit video monetization status" \
+      node scripts/yt-studio-probe.mjs
+    ```
+    (and then drive the modal flow manually + check Save state)
 
 ## Notes
 
@@ -67,4 +71,4 @@ Before adding the parameter, **investigate the 5s mouseMoved hang** so we can do
 
 ## Starting point for the next conversation
 
-> Read this file + the YouTube session log mentioned above. Start with **B1**: write the minimal mouseMoved repro and measure. Report what you found before touching anything in handlers.ts.
+> B1 + B2 are landed. B3 partially closed (clickStrategy verified mechanically + on a real Polymer checkbox; the original Monetization-radio + modal-Submit case is awaiting Rikuto's manual run since it requires toggling actual monetization state on a real video). Pick this up if/when a "safe" video is available to toggle.

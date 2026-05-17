@@ -658,7 +658,16 @@ export async function getSourceAt({
 
 // --- Actions ---
 
-export async function click({ tabId, stableId }: { tabId: number; stableId: string }) {
+export async function click({
+  tabId,
+  stableId,
+  clickStrategy,
+}: {
+  tabId: number;
+  stableId: string;
+  clickStrategy?: "events" | "native" | "events+native";
+}) {
+  const strategy = clickStrategy ?? "events";
   const n = getNode(tabId, stableId);
   // Pass cached label/role so the safety classifier can skip a DOM.describeNode round-trip
   // when the label is obviously not money/destructive.
@@ -669,6 +678,15 @@ export async function click({ tabId, stableId }: { tabId: number; stableId: stri
   });
   if (decision === "denied") return { ok: false, reason: "user-denied" };
 
+  // "native" strategy: element.click() via Runtime.callFunctionOn. Doesn't need bounds,
+  // but we still scrollIntoView so the framework's click handler sees a reasonable
+  // layout state (matches what the "events" path does).
+  if (strategy === "native") {
+    if (!n.inViewport) await scrollIntoView(tabId, n.backendNodeId);
+    await nativeClick(tabId, n.backendNodeId);
+    return { ok: true, strategy };
+  }
+
   // Fast path: element was reported in the viewport on the last getInteractables call,
   // so we can dispatch the click using cached bounds — no scrollIntoView, no second
   // DOM.getBoxModel round-trip. This is the common case and saves 2 round-trips per click.
@@ -676,7 +694,8 @@ export async function click({ tabId, stableId }: { tabId: number; stableId: stri
     const cx = n.bounds.x + n.bounds.width / 2;
     const cy = n.bounds.y + n.bounds.height / 2;
     await dispatchClick(tabId, cx, cy);
-    return { ok: true, x: cx, y: cy };
+    if (strategy === "events+native") await nativeClick(tabId, n.backendNodeId);
+    return { ok: true, x: cx, y: cy, strategy };
   }
 
   await scrollIntoView(tabId, n.backendNodeId);
@@ -685,6 +704,7 @@ export async function click({ tabId, stableId }: { tabId: number; stableId: stri
   const cx = (x1 + x2) / 2;
   const cy = (y1 + y3) / 2;
   await dispatchClick(tabId, cx, cy);
+  if (strategy === "events+native") await nativeClick(tabId, n.backendNodeId);
   // Refresh cache so a follow-up click on the same node hits the fast path.
   n.bounds = {
     x: Math.round(x1),
@@ -693,7 +713,7 @@ export async function click({ tabId, stableId }: { tabId: number; stableId: stri
     height: Math.round(y3 - y1),
   };
   n.inViewport = true;
-  return { ok: true, x: cx, y: cy };
+  return { ok: true, x: cx, y: cy, strategy };
 }
 
 // Find an interactable by label substring + optional role, click the Nth match.
@@ -707,6 +727,7 @@ export async function clickByLabel({
   nth,
   caseInsensitive,
   viewport,
+  clickStrategy,
 }: {
   tabId: number;
   labelMatch: string;
@@ -714,6 +735,7 @@ export async function clickByLabel({
   nth?: number;
   caseInsensitive?: boolean;
   viewport?: "visible" | "all";
+  clickStrategy?: "events" | "native" | "events+native";
 }) {
   // Reuse getInteractables' filtered output so behavior matches exactly.
   const initialViewport = viewport ?? "visible";
@@ -762,7 +784,7 @@ export async function clickByLabel({
     };
   }
   const picked = matches[idx];
-  const clickResult: any = await click({ tabId, stableId: picked.stableId });
+  const clickResult: any = await click({ tabId, stableId: picked.stableId, clickStrategy });
   return {
     ...clickResult,
     matchCount: matches.length,
@@ -974,7 +996,10 @@ async function scrollIntoView(tabId: number, backendNodeId: number) {
 }
 
 async function dispatchClick(tabId: number, x: number, y: number) {
-  // TEMP: removed mouseMoved to bisect a 5s click regression observed in bench.
+  // Two events only (press + release). Prepending mouseMoved caused a hard ~5s stall
+  // per click via chrome.debugger regardless of params or page heaviness — see
+  // PROJECT.md D18 + docs/tasks/web-component-click-reliability.md. Polymer/lit
+  // pages that need a "real" click should pass clickStrategy:"native" instead.
   await cdp.send(tabId, "Input.dispatchMouseEvent", {
     type: "mousePressed",
     x,
@@ -991,6 +1016,28 @@ async function dispatchClick(tabId: number, x: number, y: number) {
     clickCount: 1,
     buttons: 0,
   });
+}
+
+// "native" click strategy: resolve the backendNode to a Runtime object in its
+// owning execution context, then invoke this.click() on it. Produces an event
+// with isTrusted: false — most frameworks (React, Vue, Lit, Polymer's tap/down
+// listeners) accept it; some pure-isTrusted gates may not. Use as a fallback
+// when the dispatch-based path visually selects but doesn't dirty the form.
+async function nativeClick(tabId: number, backendNodeId: number) {
+  const resolved: any = await cdp.send(tabId, "DOM.resolveNode", { backendNodeId });
+  const objectId = resolved?.object?.objectId;
+  if (!objectId) throw new Error("nativeClick: failed to resolve node to Runtime object");
+  try {
+    await cdp.send(tabId, "Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration: "function(){ this.click(); }",
+      awaitPromise: false,
+      returnByValue: true,
+    });
+  } finally {
+    // Free the Runtime object handle so the renderer can GC the node reference.
+    await cdp.send(tabId, "Runtime.releaseObject", { objectId }).catch(() => {});
+  }
 }
 
 async function maybeConfirm(

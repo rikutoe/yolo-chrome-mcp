@@ -1,7 +1,7 @@
 # Tasks
 
 ## Active
-- [ ] Web Component click reliability — fix YouTube-Studio-class Polymer/lit form-dirty bug without re-introducing the 5s mouseMoved hang → [detail](tasks/web-component-click-reliability.md)
+- [ ] Verify clickStrategy:"native" on the actual YouTube Studio Monetization-radio + modal-Submit flow → [detail](tasks/web-component-click-reliability.md) (B3 follow-up — needs Rikuto to consciously toggle a real video's monetization state, which is the only way to exercise the specific Polymer code path that exhibited the original bug)
 
 ## Upcoming
-- [ ] Tag v0.2.4 release once the Web Component findings settle
+- [ ] Tag v0.2.4 release (clickStrategy + mouseMoved hang findings landed)

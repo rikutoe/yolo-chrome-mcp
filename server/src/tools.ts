@@ -188,16 +188,30 @@ export const tools: ToolDef[] = [
         .optional()
         .default("visible")
         .describe("'visible' is almost always right; 'all' is for off-screen elements."),
+      clickStrategy: z
+        .enum(["events", "native", "events+native"])
+        .optional()
+        .default("events")
+        .describe(
+          "Same as click.clickStrategy. Use 'native' on Polymer / lit pages (YouTube Studio, etc.) where the default 'events' click visually selects but doesn't dirty the form."
+        ),
     }),
     handler: (b, i) => b.call("clickByLabel", i, 30000),
   },
   {
     name: "click",
     description:
-      "Click an interactable element by stableId (from getInteractables). May trigger a safety confirmation overlay if classified as dangerous.",
+      "Click an interactable element by stableId (from getInteractables). May trigger a safety confirmation overlay if classified as dangerous. On Web Component pages (YouTube Studio, Google Cloud Console, Workspace Admin) where the default dispatch-based click visually selects an element but doesn't dirty the form / enable the Save button, retry with clickStrategy:'native'.",
     inputSchema: z.object({
       tabId,
       stableId: z.string(),
+      clickStrategy: z
+        .enum(["events", "native", "events+native"])
+        .optional()
+        .default("events")
+        .describe(
+          "'events' (default): Input.dispatchMouseEvent press+release — right for vanilla HTML / React / Vue. 'native': element.click() via Runtime.callFunctionOn — use on Polymer / lit pages where 'events' visually clicks but doesn't dirty the form. 'events+native': both in sequence, for unknown / mixed pages."
+        ),
     }),
     handler: (b, i) => b.call("click", i, 30000),
   },

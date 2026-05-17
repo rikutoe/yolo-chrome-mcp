@@ -322,6 +322,50 @@ function pad(s, n) { return (s + " ".repeat(n)).slice(0, n); }
     return { followed: v };
   });
 
+  // --- 8c. clickStrategy sanity: native + events+native still work and stay fast --
+  // Per-click budget ~50ms keeps us honest about not re-introducing the 5s mouseMoved
+  // regression (see PROJECT.md D18 / D22).
+  await step("inject strategy probe", () => call("evalJs", {
+    tabId,
+    expression: `(() => {
+      document.querySelectorAll('#bench-strat').forEach(n => n.remove());
+      const host = document.createElement('div');
+      host.id = 'bench-strat';
+      host.style.cssText = 'padding:16px;font:14px/1.4 system-ui;';
+      window.__benchStrat = { events: 0, native: 0, both: 0 };
+      host.innerHTML = '<div style="display:flex;gap:8px;">'
+        + '<button aria-label="strat-events">events</button>'
+        + '<button aria-label="strat-native">native</button>'
+        + '<button aria-label="strat-both">both</button>'
+        + '</div>';
+      document.body.appendChild(host);
+      host.scrollIntoView({block:'start'});
+      host.querySelector('button[aria-label="strat-events"]').addEventListener('click', () => window.__benchStrat.events++);
+      host.querySelector('button[aria-label="strat-native"]').addEventListener('click', () => window.__benchStrat.native++);
+      host.querySelector('button[aria-label="strat-both"]').addEventListener('click', () => window.__benchStrat.both++);
+      return { ok: true };
+    })()`,
+  }));
+  const STRAT_BUDGET = 50;
+  for (const strat of ["events", "native", "events+native"]) {
+    const label = `strat-${strat === "events+native" ? "both" : strat}`;
+    const t0 = Date.now();
+    await call("clickByLabel", { tabId, labelMatch: label, roleMatch: "button", clickStrategy: strat });
+    const ms = Date.now() - t0;
+    steps.push({ name: `clickStrategy ${strat}`, ok: true, ms, info: "" });
+    console.log(`${ms <= STRAT_BUDGET ? "✓" : "⚠"} ${pad(ms + "ms", 8)} clickStrategy ${strat}`);
+    if (ms > STRAT_BUDGET * 10) throw new Error(`clickStrategy ${strat} took ${ms}ms (budget ${STRAT_BUDGET}ms, hard ceiling ${STRAT_BUDGET * 10}ms)`);
+  }
+  await step("verify strategy counts", async () => {
+    const r = await call("evalJs", { tabId, expression: "JSON.stringify(window.__benchStrat)" });
+    const v = r.value ? JSON.parse(r.value) : null;
+    if (!v) throw new Error("strat state missing");
+    if (v.events !== 1) throw new Error(`events count ${v.events}, expected 1`);
+    if (v.native !== 1) throw new Error(`native count ${v.native}, expected 1`);
+    if (v.both !== 2) throw new Error(`events+native count ${v.both}, expected 2 (events fires + native fires)`);
+    return v;
+  });
+
   // --- 9. Submit -------------------------------------------------------------
   const submit = formInter.nodes.find((n) => n.label === "submit-form");
   if (!submit) throw new Error("submit button not found in interactables");
