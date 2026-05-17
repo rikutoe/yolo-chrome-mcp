@@ -301,6 +301,13 @@ export const tools: ToolDef[] = [
     handler: (b, i) => b.call("waitForStable", i, 65000),
   },
   {
+    name: "reloadSelf",
+    description:
+      "Reload the yolo-chrome extension itself (chrome.runtime.reload). Use after rebuilding extension/dist so a new background.js is loaded without the user clicking the ↻ in chrome://extensions. The WS connection drops on reload — the next tool call will hang briefly while the extension reconnects (≤15s, usually <2s). Returns immediately; do NOT call repeatedly.",
+    inputSchema: z.object({}),
+    handler: (b) => b.call("reloadSelf", {}, 5000),
+  },
+  {
     name: "setSafetyMode",
     description:
       "Set the safety overlay mode: 'always' (confirm every action), 'dangerous-only' (default — confirm money UI, account-destructive labels, password-form submits, credit-card / password typing, risky evalJs), 'off' (no prompts). Navigation never prompts.",

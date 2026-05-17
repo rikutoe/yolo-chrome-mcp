@@ -26,6 +26,7 @@ const handlers: Record<string, (params: any) => Promise<any>> = {
   evalJs: (p) => h.evalJs(p),
   waitForStable: (p) => h.waitForStable(p),
   setSafetyMode: (p) => h.setSafetyMode(p),
+  reloadSelf: () => h.reloadSelf(),
 };
 
 function connect() {

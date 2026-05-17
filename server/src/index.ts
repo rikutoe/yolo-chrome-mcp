@@ -107,8 +107,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     const result = await tool.handler(bridge, parsed.data);
     const durationMs = Date.now() - t0;
-    // Screenshot returns image; wrap in MCP content shape. We tuck the latency into
-    // a tiny text block alongside the image so the AI can still see it.
+    // Screenshot returns image; wrap in MCP content shape.
     if (
       tool.name === "screenshot" &&
       result &&
@@ -127,20 +126,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       return { content };
     }
-    // For JSON results, fold _meta.durationMs into the object so it shows up in the
-    // text payload the AI reads back. Falls back to a sidecar perf line when result is
-    // not a plain object.
-    let payload: any = result;
+    // Keep the primary payload shape identical to what the handler returned (so array
+    // results like listTabs survive as arrays, not `{ value: [...] }`). Emit the perf
+    // info as a separate sidecar text content item — the AI sees both, MCP clients that
+    // only read content[0] still see the canonical payload.
+    const content: any[] = [
+      { type: "text", text: JSON.stringify(result, null, 2) },
+    ];
     if (PERF_ON) {
-      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-        payload = { ...payload, _meta: { ...(payload._meta ?? {}), durationMs } };
-      } else {
-        payload = { value: payload, _meta: { durationMs } };
-      }
+      content.push({ type: "text", text: `[perf] ${tool.name} ${durationMs}ms` });
     }
-    return {
-      content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
-    };
+    return { content };
   } catch (err: any) {
     const durationMs = Date.now() - t0;
     const perfTag = PERF_ON ? ` [${durationMs}ms]` : "";

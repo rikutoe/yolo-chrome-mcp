@@ -261,11 +261,26 @@ export async function getInteractables({
 }) {
   await ensureAttached(tabId);
 
-  // Kick off independent fetches in parallel: AX tree, layout metrics, frame tree.
-  const [axMain, layoutVp, frameTree]: any[] = await Promise.all([
+  // Kick off independent fetches in parallel: AX tree, layout metrics, frame tree,
+  // and a DOM-side iframe scan. The DOM scan is the only way to see out-of-process
+  // cross-origin iframes — Page.getFrameTree from the parent target omits them under
+  // site isolation, which is why earlier sessions silently missed AdSense / payments
+  // iframes and the AI had to investigate via evalJs.
+  const [axMain, layoutVp, frameTree, domFrames]: any[] = await Promise.all([
     cdp.send(tabId, "Accessibility.getFullAXTree"),
     cdp.send(tabId, "Page.getLayoutMetrics"),
     cdp.send(tabId, "Page.getFrameTree").catch(() => null),
+    cdp
+      .send(tabId, "Runtime.evaluate", {
+        expression: `Array.from(document.querySelectorAll('iframe')).map(f => ({
+          src: f.src || '',
+          origin: (() => { try { return new URL(f.src, location.href).origin; } catch { return null; } })(),
+          width: f.offsetWidth,
+          height: f.offsetHeight
+        }))`,
+        returnByValue: true,
+      })
+      .catch(() => null),
   ]);
 
   const vw = layoutVp.cssVisualViewport ?? layoutVp.visualViewport;
@@ -433,6 +448,25 @@ export async function getInteractables({
       (n: any) => n.role?.value && INTERACTIVE_ROLES.has(n.role.value) && !n.ignored
     ).length,
   }));
+  // Merge in DOM-discovered iframes that the frame tree silently dropped (out-of-process
+  // cross-origin iframes under site isolation). Match on URL: anything in DOM but not in
+  // the frame tree is reported with accessible:false so the caller knows it exists and
+  // can't be reached by any tool — no more evalJs probing to discover the obvious.
+  const domIframes: Array<{ src: string; origin: string | null; width: number; height: number }> =
+    domFrames?.result?.value ?? [];
+  const knownUrls = new Set(frames.map((f) => f.url));
+  for (const di of domIframes) {
+    if (!di.src || knownUrls.has(di.src)) continue;
+    const sameOrigin = !!mainOrigin && di.origin === mainOrigin;
+    frames.push({
+      frameId: "(out-of-process)",
+      url: di.src,
+      origin: di.origin,
+      sameOrigin,
+      accessible: false,
+      interactableCount: 0,
+    });
+  }
   const blockedFrames = frames.filter((f) => !f.accessible);
   const note =
     blockedFrames.length > 0
@@ -444,13 +478,18 @@ export async function getInteractables({
 
 function getNode(tabId: number, stableId: string): CachedNode {
   const m = nodeMaps.get(tabId);
-  const n = m?.get(stableId);
-  if (!n) {
-    throw new Error(
-      `Unknown stableId '${stableId}'. Call getInteractables on tab ${tabId} first to refresh the node map.`
-    );
+  const cached = m?.get(stableId);
+  if (cached) return cached;
+  // Recovery path: the stableId format is `n{backendNodeId}`, and backendNodeIds are
+  // persistent across CDP calls for the same page lifecycle. So even when the local
+  // nodeMap got replaced (e.g. another tool internally called getInteractables and
+  // overwrote it), we can still resolve the click target — we just lose the cached
+  // bounds / label / role and fall back to the slow-path click which re-fetches them.
+  const match = /^n(\d+)$/.exec(stableId);
+  if (!match) {
+    throw new Error(`Bad stableId format '${stableId}' — expected 'n<backendNodeId>'.`);
   }
-  return n;
+  return { backendNodeId: Number(match[1]) };
 }
 
 // --- Stage 4 ---
@@ -677,15 +716,32 @@ export async function clickByLabel({
   viewport?: "visible" | "all";
 }) {
   // Reuse getInteractables' filtered output so behavior matches exactly.
-  const r = await getInteractables({
+  const initialViewport = viewport ?? "visible";
+  let r = await getInteractables({
     tabId,
-    viewport: viewport ?? "visible",
+    viewport: initialViewport,
     limit: 500,
     labelMatch,
     roleMatch,
     caseInsensitive,
   });
-  const matches = r.nodes;
+  let matches = r.nodes;
+  // Auto-fallback: when the caller didn't override and visible-only found nothing,
+  // try the whole DOM. click() will scroll the element into view before dispatching,
+  // so off-viewport matches are still actionable. This eliminates the "I called
+  // scrollIntoView in evalJs then clickByLabel can't find it because the AX tree's
+  // bounds haven't refreshed yet" footgun.
+  if (matches.length === 0 && initialViewport === "visible") {
+    r = await getInteractables({
+      tabId,
+      viewport: "all",
+      limit: 500,
+      labelMatch,
+      roleMatch,
+      caseInsensitive,
+    });
+    matches = r.nodes;
+  }
   const idx = nth ?? 0;
   if (matches.length === 0) {
     return {
@@ -875,6 +931,20 @@ export async function waitForStable({
   return { status };
 }
 
+// Self-reload: call chrome.runtime.reload() to pick up a freshly built extension.
+// The WS connection drops on reload, so the caller's response may be cut off mid-flight;
+// we schedule the reload after the current event loop tick so the ok ack has a chance to
+// reach the server. The extension will reconnect on the next keepalive alarm (≤15s) or on
+// any tool call attempt (auto-reconnect on send).
+export async function reloadSelf() {
+  setTimeout(() => {
+    try {
+      chrome.runtime.reload();
+    } catch {}
+  }, 50);
+  return { ok: true, reloadingIn: 50 };
+}
+
 export async function setSafetyMode({
   mode,
 }: {
@@ -904,17 +974,7 @@ async function scrollIntoView(tabId: number, backendNodeId: number) {
 }
 
 async function dispatchClick(tabId: number, x: number, y: number) {
-  // Prepend a mouseMoved event before pressing. Several Web Component frameworks
-  // (Polymer / lit-element, used by YouTube Studio) only mark themselves "active"
-  // on pointermove → pointerdown — clicking without the move can leave their internal
-  // state machine in a stale step where the `change` event never fires.
-  await cdp.send(tabId, "Input.dispatchMouseEvent", {
-    type: "mouseMoved",
-    x,
-    y,
-    button: "none",
-    buttons: 0,
-  });
+  // TEMP: removed mouseMoved to bisect a 5s click regression observed in bench.
   await cdp.send(tabId, "Input.dispatchMouseEvent", {
     type: "mousePressed",
     x,
