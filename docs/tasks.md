@@ -1,7 +1,8 @@
 # Tasks
 
 ## Active
-- [ ] Cut the first v0.1.0 release → [detail](tasks/release-v0.1.0.md)
+_(none)_
 
 ## Upcoming
-- [ ] Run the full 17-tool E2E via Claude Code → [detail](tasks/e2e-via-claude.md)
+- [ ] Tag v0.2.4 release once the performance/Web-Component findings settle
+- [ ] Revisit Web Component click reliability (mouseMoved caused a 5s hang; YouTube-Studio class apps still need a fallback path)
