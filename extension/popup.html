@@ -44,10 +44,11 @@
     line-height: 1.45;
     color: var(--fg);
     background: var(--bg);
-    width: 300px;
+    width: 320px;
     padding: 16px;
     -webkit-font-smoothing: antialiased;
   }
+  [hidden] { display: none !important; }
 
   .header {
     display: flex;
@@ -198,6 +199,41 @@
   .button:hover { background: var(--surface-hover); }
   .button:active { transform: translateY(1px); }
   .button svg { width: 12px; height: 12px; }
+  .button.primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  .button.primary:hover { opacity: 0.92; background: var(--accent); }
+
+  .setup-desc {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    line-height: 1.5;
+  }
+  .cmd-block {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10.5px;
+    line-height: 1.5;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--fg);
+    max-height: 110px;
+    overflow: auto;
+  }
+  .setup-hint {
+    font-size: 10.5px;
+    color: var(--subtle);
+    margin: 8px 0 0;
+    line-height: 1.5;
+  }
+  .setup-hint a { color: var(--muted); }
 
   .footer {
     margin-top: 12px;
@@ -236,6 +272,21 @@
         <span class="sub" id="sub">MCP サーバを探しています</span>
       </div>
     </div>
+  </div>
+
+  <div class="card" id="setupCard" hidden>
+    <div class="section-label">セットアップ</div>
+    <p class="setup-desc">
+      この拡張だけでは動きません。ターミナルで下のコマンドを一度実行して、ローカルの MCP サーバと Claude を接続してください。
+    </p>
+    <pre class="cmd-block" id="cmdBlock">npx -y yolo-chrome-mcp@latest install --routing-only</pre>
+    <button class="button primary" id="copyCmd">
+      <span id="copyLabel">コマンドをコピー</span>
+    </button>
+    <p class="setup-hint">
+      実行後、Claude Code / Claude Desktop を再起動するとここが緑になります。
+      Node.js と Claude Code（または Claude Desktop）が必要です。
+    </p>
   </div>
 
   <div class="card">

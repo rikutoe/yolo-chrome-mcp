@@ -13,7 +13,8 @@ import { runInstall, runUninstallRouting } from "./install.js";
 // Subcommands
 const sub = process.argv[2];
 if (sub === "install" || sub === "setup") {
-  await runInstall();
+  const routingOnly = process.argv.slice(3).includes("--routing-only");
+  await runInstall({ routingOnly });
   process.exit(0);
 }
 if (sub === "uninstall-routing") {
@@ -28,6 +29,11 @@ Usage:
   yolo-chrome-mcp setup              One-command setup: registers the server with Claude Code,
                                      loads the Chrome extension, and (optionally) installs the
                                      PreToolUse routing hook + CLAUDE.md rule. ('install' is an alias.)
+  yolo-chrome-mcp setup --routing-only
+                                     Skip the extension-load step (use when the extension is
+                                     already installed from the Chrome Web Store) and only run
+                                     the auto-register + routing hook + CLAUDE.md setup. Same
+                                     command is what the popup's "Copy" button offers.
   yolo-chrome-mcp uninstall-routing  Remove the PreToolUse hook and the CLAUDE.md rule.
   yolo-chrome-mcp --version          Print version.
 

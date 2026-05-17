@@ -291,7 +291,18 @@ function registerWithClaude(): { outcome: RegisterOutcome; message: string } {
 
 // ---------- entry points ----------
 
-export async function runInstall() {
+export type InstallOptions = {
+  /** Skip extension load + `claude mcp add` reminder. For users who installed
+   *  the extension from the Chrome Web Store and already ran `claude mcp add`
+   *  (typically chained inline from the popup's copy-paste one-liner). */
+  routingOnly?: boolean;
+};
+
+export async function runInstall(opts: InstallOptions = {}) {
+  if (opts.routingOnly) {
+    await runRoutingOnly();
+    return;
+  }
   const dir = resolveExtensionDir();
   const clipboardOk = await copyToClipboard(dir);
 
@@ -392,6 +403,59 @@ To remove the routing wiring later:
 
       npx yolo-chrome-mcp uninstall-routing
 
+`);
+}
+
+async function runRoutingOnly() {
+  process.stdout.write(`
+yolo-chrome-mcp — routing setup
+===============================
+
+Assuming the Chrome extension is already installed (from the Chrome Web Store
+or unpacked). Registering the MCP server with Claude Code and wiring routing
+so Claude always uses yolo-chrome-mcp for Chrome operations.
+
+`);
+  const reg = registerWithClaude();
+  process.stdout.write(reg.message + "\n");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const installHook = await prompt(rl, "Install the PreToolUse hook?", true);
+    if (installHook) {
+      await writeHookScript();
+      const r = await ensureHook();
+      const msg =
+        r === "already"
+          ? "  ✓ Hook was already present in settings.json (no change)."
+          : r === "updated"
+          ? "  ✓ Hook updated in settings.json."
+          : "  ✓ Hook added to settings.json.";
+      process.stdout.write(msg + "\n");
+      process.stdout.write(`    script: ${HOOK_SCRIPT_PATH}\n\n`);
+    } else {
+      process.stdout.write("  Skipped hook installation.\n\n");
+    }
+
+    const installRule = await prompt(rl, "Add routing rule to ~/.claude/CLAUDE.md?", true);
+    if (installRule) {
+      const r = await ensureRoutingRule();
+      const msg =
+        r === "already"
+          ? "  ✓ Rule was already present in CLAUDE.md (no change)."
+          : r === "created"
+          ? "  ✓ Created ~/.claude/CLAUDE.md with the routing rule."
+          : "  ✓ Appended routing rule to ~/.claude/CLAUDE.md.";
+      process.stdout.write(msg + "\n\n");
+    } else {
+      process.stdout.write("  Skipped CLAUDE.md edit.\n\n");
+    }
+  } finally {
+    rl.close();
+  }
+
+  process.stdout.write(`Done. Restart Claude Code; the extension popup should turn green.
+If it stays red, open chrome://extensions and make sure the extension is enabled.
+To remove the routing wiring later: npx yolo-chrome-mcp uninstall-routing
 `);
 }
 
