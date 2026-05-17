@@ -124,6 +124,59 @@ interface InteractableNode {
   bounds?: { x: number; y: number; width: number; height: number };
   inViewport: boolean;
   href?: string;
+  // AX-tree state flags. Only included when truthy / set, to keep the wire payload
+  // small for the 99% case (vanilla buttons/links with no special state). When absent
+  // the property is undefined — read it as "default / no signal" rather than "false".
+  disabled?: boolean;
+  checked?: boolean | "mixed";
+  expanded?: boolean;
+  pressed?: boolean;
+  selected?: boolean;
+  required?: boolean;
+  readonly?: boolean;
+  focused?: boolean;
+}
+
+// Extract AX state flags from a node's `properties` array.
+// AX `properties` is an array of { name, value: { type, value } } objects.
+function extractStateFlags(axNode: any): Partial<InteractableNode> {
+  const out: Partial<InteractableNode> = {};
+  const props = axNode.properties;
+  if (!Array.isArray(props)) return out;
+  for (const p of props) {
+    const v = p.value?.value;
+    switch (p.name) {
+      case "disabled":
+        if (v === true) out.disabled = true;
+        break;
+      case "checked":
+        // AX checked can be "true" | "false" | "mixed"
+        if (v === "true" || v === true) out.checked = true;
+        else if (v === "mixed") out.checked = "mixed";
+        else if (v === "false" || v === false) out.checked = false;
+        break;
+      case "expanded":
+        if (typeof v === "boolean") out.expanded = v;
+        break;
+      case "pressed":
+        if (v === "true" || v === true) out.pressed = true;
+        else if (v === "false" || v === false) out.pressed = false;
+        break;
+      case "selected":
+        if (typeof v === "boolean") out.selected = v;
+        break;
+      case "required":
+        if (v === true) out.required = true;
+        break;
+      case "readonly":
+        if (v === true) out.readonly = true;
+        break;
+      case "focused":
+        if (v === true) out.focused = true;
+        break;
+    }
+  }
+  return out;
 }
 
 interface CachedNode {
@@ -171,14 +224,40 @@ function flattenFrameTree(node: any): any[] {
   return out;
 }
 
+function normalizeRoleFilter(
+  roleMatch?: string | string[]
+): Set<string> | null {
+  if (!roleMatch) return null;
+  const arr = Array.isArray(roleMatch) ? roleMatch : [roleMatch];
+  return new Set(arr.map((r) => r.toLowerCase()));
+}
+
+function matchesLabel(
+  label: string,
+  labelMatch?: string,
+  caseInsensitive?: boolean
+): boolean {
+  if (!labelMatch) return true;
+  if (caseInsensitive) {
+    return label.toLowerCase().includes(labelMatch.toLowerCase());
+  }
+  return label.includes(labelMatch);
+}
+
 export async function getInteractables({
   tabId,
   viewport,
   limit,
+  labelMatch,
+  roleMatch,
+  caseInsensitive,
 }: {
   tabId: number;
   viewport?: "visible" | "all";
   limit?: number;
+  labelMatch?: string;
+  roleMatch?: string | string[];
+  caseInsensitive?: boolean;
 }) {
   await ensureAttached(tabId);
 
@@ -240,30 +319,36 @@ export async function getInteractables({
     backendNodeId: number;
     role: string;
     label: string;
+    state: Partial<InteractableNode>;
     frameId?: string;
   };
   const candidates: Candidate[] = [];
   const seen = new Set<number>();
 
+  const roleFilter = normalizeRoleFilter(roleMatch);
   const collect = (axNodes: any[], frameId?: string) => {
     for (const n of axNodes) {
       const role = n.role?.value;
       if (!role || !INTERACTIVE_ROLES.has(role)) continue;
+      if (roleFilter && !roleFilter.has(role.toLowerCase())) continue;
       if (n.ignored) continue;
       const backendNodeId: number | undefined = n.backendDOMNodeId;
       if (!backendNodeId || seen.has(backendNodeId)) continue;
-      const label =
+      const rawLabel =
         n.name?.value ??
         n.description?.value ??
         (n.properties ?? [])
           .filter((p: any) => p.name === "value")
           .map((p: any) => String(p.value?.value ?? ""))
           .join(" ");
+      const label = String(rawLabel ?? "").slice(0, 200);
+      if (!matchesLabel(label, labelMatch, caseInsensitive)) continue;
       seen.add(backendNodeId);
       candidates.push({
         backendNodeId,
         role,
-        label: (label ?? "").slice(0, 200),
+        label,
+        state: extractStateFlags(n),
         frameId,
       });
     }
@@ -330,6 +415,7 @@ export async function getInteractables({
       tag: undefined,
       bounds,
       inViewport,
+      ...c.state,
     });
     if (out.length >= max) break;
   }
@@ -571,6 +657,63 @@ export async function click({ tabId, stableId }: { tabId: number; stableId: stri
   return { ok: true, x: cx, y: cy };
 }
 
+// Find an interactable by label substring + optional role, click the Nth match.
+// This collapses the common "getInteractables → find → click" three-step pattern into
+// a single round-trip: the AI doesn't have to send 100-node payloads back and forth,
+// and the action is unambiguous about intent ("click the Follow button for @foo").
+export async function clickByLabel({
+  tabId,
+  labelMatch,
+  roleMatch,
+  nth,
+  caseInsensitive,
+  viewport,
+}: {
+  tabId: number;
+  labelMatch: string;
+  roleMatch?: string | string[];
+  nth?: number;
+  caseInsensitive?: boolean;
+  viewport?: "visible" | "all";
+}) {
+  // Reuse getInteractables' filtered output so behavior matches exactly.
+  const r = await getInteractables({
+    tabId,
+    viewport: viewport ?? "visible",
+    limit: 500,
+    labelMatch,
+    roleMatch,
+    caseInsensitive,
+  });
+  const matches = r.nodes;
+  const idx = nth ?? 0;
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      reason: "no-match",
+      matchCount: 0,
+      hint: `No visible interactable matched labelMatch=${JSON.stringify(labelMatch)}${
+        roleMatch ? `, roleMatch=${JSON.stringify(roleMatch)}` : ""
+      }. Try a different substring, viewport:"all", or check that the page has loaded.`,
+    };
+  }
+  if (idx >= matches.length) {
+    return {
+      ok: false,
+      reason: "nth-out-of-range",
+      matchCount: matches.length,
+      hint: `Asked for nth=${idx} but only ${matches.length} match(es) exist.`,
+    };
+  }
+  const picked = matches[idx];
+  const clickResult: any = await click({ tabId, stableId: picked.stableId });
+  return {
+    ...clickResult,
+    matchCount: matches.length,
+    clicked: { stableId: picked.stableId, label: picked.label, role: picked.role },
+  };
+}
+
 export async function typeText({
   tabId,
   stableId,
@@ -639,10 +782,27 @@ export async function scroll({
   return { ok: true };
 }
 
-export async function navigate({ tabId, url }: { tabId: number; url: string }) {
+export async function navigate({
+  tabId,
+  url,
+  waitForLoad,
+  waitTimeoutMs,
+}: {
+  tabId: number;
+  url: string;
+  waitForLoad?: boolean;
+  waitTimeoutMs?: number;
+}) {
   const decision = await maybeConfirm(tabId, "navigate", { url });
   if (decision === "denied") return { ok: false, reason: "user-denied" };
+  await ensureAttached(tabId);
   await chrome.tabs.update(tabId, { url });
+  // Default: block until the network is quiet so the caller doesn't have to chain a
+  // separate waitForStable. Pass waitForLoad:false to keep the old fire-and-forget shape.
+  if (waitForLoad !== false) {
+    const status = await waitForIdle(tabId, waitTimeoutMs ?? 5000);
+    return { ok: true, waitStatus: status };
+  }
   return { ok: true };
 }
 
@@ -744,16 +904,33 @@ async function scrollIntoView(tabId: number, backendNodeId: number) {
 }
 
 async function dispatchClick(tabId: number, x: number, y: number) {
-  for (const type of ["mousePressed", "mouseReleased"] as const) {
-    await cdp.send(tabId, "Input.dispatchMouseEvent", {
-      type,
-      x,
-      y,
-      button: "left",
-      clickCount: 1,
-      buttons: 1,
-    });
-  }
+  // Prepend a mouseMoved event before pressing. Several Web Component frameworks
+  // (Polymer / lit-element, used by YouTube Studio) only mark themselves "active"
+  // on pointermove → pointerdown — clicking without the move can leave their internal
+  // state machine in a stale step where the `change` event never fires.
+  await cdp.send(tabId, "Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x,
+    y,
+    button: "none",
+    buttons: 0,
+  });
+  await cdp.send(tabId, "Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x,
+    y,
+    button: "left",
+    clickCount: 1,
+    buttons: 1,
+  });
+  await cdp.send(tabId, "Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x,
+    y,
+    button: "left",
+    clickCount: 1,
+    buttons: 0,
+  });
 }
 
 async function maybeConfirm(

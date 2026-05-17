@@ -92,6 +92,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   })),
 }));
 
+// Latency is attached to every successful response so the AI can see, per tool call,
+// how long the round-trip actually took. `YOLO_PERF=0` opts out.
+const PERF_ON = process.env.YOLO_PERF !== "0";
+
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const tool = tools.find((t) => t.name === req.params.name);
   if (!tool) throw new Error(`Unknown tool: ${req.params.name}`);
@@ -99,32 +103,50 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (!parsed.success) {
     throw new Error(`Invalid arguments for ${tool.name}: ${parsed.error.message}`);
   }
+  const t0 = Date.now();
   try {
     const result = await tool.handler(bridge, parsed.data);
-    // Screenshot returns image; wrap in MCP content shape.
+    const durationMs = Date.now() - t0;
+    // Screenshot returns image; wrap in MCP content shape. We tuck the latency into
+    // a tiny text block alongside the image so the AI can still see it.
     if (
       tool.name === "screenshot" &&
       result &&
       typeof result === "object" &&
       "dataBase64" in result
     ) {
-      return {
-        content: [
-          {
-            type: "image",
-            data: result.dataBase64,
-            mimeType: result.mimeType ?? "image/jpeg",
-          },
-        ],
-      };
+      const content: any[] = [
+        {
+          type: "image",
+          data: result.dataBase64,
+          mimeType: result.mimeType ?? "image/jpeg",
+        },
+      ];
+      if (PERF_ON) {
+        content.push({ type: "text", text: `[perf] ${tool.name} ${durationMs}ms` });
+      }
+      return { content };
+    }
+    // For JSON results, fold _meta.durationMs into the object so it shows up in the
+    // text payload the AI reads back. Falls back to a sidecar perf line when result is
+    // not a plain object.
+    let payload: any = result;
+    if (PERF_ON) {
+      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+        payload = { ...payload, _meta: { ...(payload._meta ?? {}), durationMs } };
+      } else {
+        payload = { value: payload, _meta: { durationMs } };
+      }
     }
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
     };
   } catch (err: any) {
+    const durationMs = Date.now() - t0;
+    const perfTag = PERF_ON ? ` [${durationMs}ms]` : "";
     return {
       isError: true,
-      content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
+      content: [{ type: "text", text: `Error${perfTag}: ${err?.message ?? String(err)}` }],
     };
   }
 });

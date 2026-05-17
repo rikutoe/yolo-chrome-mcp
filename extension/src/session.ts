@@ -189,7 +189,9 @@ function bumpInflight(s: TabState, delta: number) {
   scheduleIdle(s);
 }
 
-const IDLE_QUIET_MS = 500;
+// 250ms of network quiet is enough for almost every modern SPA to be interactable.
+// The old 500ms threshold doubled waitForStable's wall time for no real benefit.
+const IDLE_QUIET_MS = 250;
 
 // "Idle" means no Network.* events for IDLE_QUIET_MS, regardless of inflight count.
 // This makes waitForStable robust to long-lived SSE / websocket / long-poll connections

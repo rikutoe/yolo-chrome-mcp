@@ -143,19 +143,14 @@ function pad(s, n) { return (s + " ".repeat(n)).slice(0, n); }
   const flowStart = Date.now();
 
   // --- 1. Navigate + settle ---------------------------------------------------
-  // A realistic flow does this several times. waitForStable is the gate before each
-  // major action — if it has a slow path, repeated use multiplies it out.
+  // navigate auto-waits for network idle now, so we don't need a chained waitForStable
+  // after every hop. A realistic flow visits several pages.
   await step("navigate example.com", () => call("navigate", { tabId, url: "https://example.com/" }));
-  await step("waitForStable #1", () => call("waitForStable", { tabId, timeout: 8000 }));
   await step("navigate iana.org", () => call("navigate", { tabId, url: "https://www.iana.org/help/example-domains" }));
-  await step("waitForStable #2", () => call("waitForStable", { tabId, timeout: 8000 }));
   await step("getPageText (read)", () => call("getPageText", { tabId, maxChars: 800 }));
   await step("navigate back to example.com", () => call("navigate", { tabId, url: "https://example.com/" }));
-  await step("waitForStable #3", () => call("waitForStable", { tabId, timeout: 8000 }));
   await step("navigate iana root", () => call("navigate", { tabId, url: "https://www.iana.org/" }));
-  await step("waitForStable #4", () => call("waitForStable", { tabId, timeout: 8000 }));
   await step("navigate final", () => call("navigate", { tabId, url: "https://example.com/" }));
-  await step("waitForStable #5", () => call("waitForStable", { tabId, timeout: 8000 }));
 
   // --- 2. Inject heavy DOM (deterministic content) ---------------------------
   await step(`inject ${N} widgets + form`, () => call("evalJs", {
@@ -275,6 +270,57 @@ function pad(s, n) { return (s + " ".repeat(n)).slice(0, n); }
       call("type", { tabId, stableId: node.stableId, text: fieldValues[name] })
     );
   }
+
+  // --- 8b. List-click scenario (X-recs-like): click 3 Follow buttons --------
+  // Mimics the "Who to follow" page — many cards with a per-card action button. The
+  // old flow forced getInteractables → find → click sequences and tempted us to
+  // navigate to each profile to verify. The new clickByLabel collapses all of that.
+  await step("inject follow list", () => call("evalJs", {
+    tabId,
+    expression: `(() => {
+      document.querySelectorAll('#bench-follow-list').forEach(n => n.remove());
+      const host = document.createElement('div');
+      host.id = 'bench-follow-list';
+      host.style.cssText = 'padding:16px;font:14px/1.4 system-ui;';
+      window.__benchFollow = { followed: [] };
+      let html = '<h2>Who to follow</h2>';
+      const users = Array.from({length: 8}, (_, i) => 'user' + (i + 1));
+      for (const u of users) {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #444;">';
+        html += '<span style="flex:1;">@' + u + '</span>';
+        html += '<button aria-label="Follow @' + u + '" data-handle="' + u + '">Follow</button>';
+        html += '</div>';
+      }
+      host.innerHTML = html;
+      document.body.appendChild(host);
+      host.querySelectorAll('button').forEach((b) => {
+        b.addEventListener('click', () => {
+          const h = b.getAttribute('data-handle');
+          window.__benchFollow.followed.push(h);
+          b.textContent = 'Following';
+          b.setAttribute('aria-label', 'Following @' + h);
+        });
+      });
+      host.scrollIntoView({block:'start'});
+      return { users };
+    })()`,
+  }));
+  // 3 clicks using clickByLabel. After each click the label of the clicked button
+  // changes from "Follow @userN" to "Following @userN", so calling with the same
+  // labelMatch each time naturally walks down the remaining unfollowed items.
+  for (let i = 0; i < 3; i++) {
+    await step(`clickByLabel Follow #${i + 1}`, () => call("clickByLabel", {
+      tabId,
+      labelMatch: "Follow @",
+      roleMatch: "button",
+    }));
+  }
+  await step("verify 3 follows", async () => {
+    const r = await call("evalJs", { tabId, expression: "JSON.stringify(window.__benchFollow.followed)" });
+    const v = r.value ? JSON.parse(r.value) : [];
+    if (v.length !== 3) throw new Error(`followed ${v.length}, expected 3`);
+    return { followed: v };
+  });
 
   // --- 9. Submit -------------------------------------------------------------
   const submit = formInter.nodes.find((n) => n.label === "submit-form");

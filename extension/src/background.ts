@@ -17,6 +17,7 @@ const handlers: Record<string, (params: any) => Promise<any>> = {
   getStorage: (p) => h.getStorage(p),
   getSourceAt: (p) => h.getSourceAt(p),
   click: (p) => h.click(p),
+  clickByLabel: (p) => h.clickByLabel(p),
   type: (p) => h.typeText(p),
   scroll: (p) => h.scroll(p),
   navigate: (p) => h.navigate(p),

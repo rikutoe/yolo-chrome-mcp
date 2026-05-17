@@ -39,13 +39,13 @@ export const tools: ToolDef[] = [
     name: "screenshot",
     description: stage(
       2,
-      "Capture a screenshot of the tab. Defaults to viewport only — pass fullPage:true only when you really need the whole page."
+      "Capture a screenshot of the tab. Defaults to viewport-only jpeg at quality 60 (≈100KB for a 1440px viewport — small enough to be cheap to take). Pass fullPage:true or higher quality only when you really need it. Don't take a screenshot between every action — call this when you need to UNDERSTAND visual state, not to confirm an action you already verified."
     ),
     inputSchema: z.object({
       tabId,
       fullPage: z.boolean().optional().default(false),
       format: z.enum(["png", "jpeg"]).optional().default("jpeg"),
-      quality: z.number().int().min(1).max(100).optional().default(80),
+      quality: z.number().int().min(1).max(100).optional().default(60),
     }),
     handler: (b, i) => b.call("screenshot", i, 30000),
   },
@@ -66,12 +66,27 @@ export const tools: ToolDef[] = [
     name: "getInteractables",
     description: stage(
       3,
-      "Clickable / typable / link elements as a flat list with role, label, stableId, and viewport coordinates. Built from the accessibility tree — no raw HTML. Use the stableId for click/type. Response also includes a `frames` array: every iframe on the page with `accessible: true|false`. If `accessible: false`, that iframe's content is cross-origin and CANNOT be reached by ANY tool here (don't try evalJs — Chrome blocks it). When you see blocked iframes, report that to the user instead of probing further."
+      "Clickable / typable / link elements as a flat list with role, label, stableId, viewport coordinates, AND state flags (disabled, checked, expanded, pressed, selected, required, readonly, focused — only present when truthy/set, so absence means 'no signal'). Built from the accessibility tree — no raw HTML. Use the stableId for click/type. Pass labelMatch (substring) and/or roleMatch to filter — strongly prefer this over scanning a full 100-node response. **Always read state flags before falling back to evalJs** — e.g. don't run evalJs to check `button.disabled` when this tool already returns `disabled: true` on the node. Response also includes a `frames` array: every iframe on the page with `accessible: true|false`. If `accessible: false`, that iframe's content is cross-origin and CANNOT be reached by ANY tool here (don't try evalJs — Chrome blocks it). When you only need to click one specific element you already know how to identify, use clickByLabel instead — it bundles find+click into one call."
     ),
     inputSchema: z.object({
       tabId,
       viewport: z.enum(["visible", "all"]).optional().default("visible"),
       limit: z.number().int().min(1).max(500).optional().default(100),
+      labelMatch: z
+        .string()
+        .optional()
+        .describe(
+          "Substring filter on the accessible label. Cheap and dramatically shrinks the response."
+        ),
+      roleMatch: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe("Role filter — 'button', 'link', 'textbox', etc. Single string or array."),
+      caseInsensitive: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Case-insensitive labelMatch. Default false to keep matches predictable."),
     }),
     handler: (b, i) => b.call("getInteractables", i, 30000),
   },
@@ -145,6 +160,38 @@ export const tools: ToolDef[] = [
     handler: (b, i) => b.call("getSourceAt", i, 30000),
   },
   {
+    name: "clickByLabel",
+    description: stage(
+      3,
+      "Find a visible interactable by label substring (and optional role) and click it in ONE call. Strongly preferred over getInteractables+click when you know what you want — no payload to scan, no stableId bookkeeping. For repeating UI patterns like a list of Follow buttons, just call this multiple times in a row; after each click the AX tree shifts (the clicked button's label changes), so calling with nth:0 each time naturally walks the list. Returns {ok, matchCount, clicked} on success or {ok:false, reason} when no match / nth out of range."
+    ),
+    inputSchema: z.object({
+      tabId,
+      labelMatch: z
+        .string()
+        .min(1)
+        .describe("Substring of the accessible label, e.g. 'Follow @' or 'Submit'."),
+      roleMatch: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe("Optional role filter — 'button', 'link', etc."),
+      nth: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .default(0)
+        .describe("Pick the Nth match (0-indexed). Default 0."),
+      caseInsensitive: z.boolean().optional().default(false),
+      viewport: z
+        .enum(["visible", "all"])
+        .optional()
+        .default("visible")
+        .describe("'visible' is almost always right; 'all' is for off-screen elements."),
+    }),
+    handler: (b, i) => b.call("clickByLabel", i, 30000),
+  },
+  {
     name: "click",
     description:
       "Click an interactable element by stableId (from getInteractables). May trigger a safety confirmation overlay if classified as dangerous.",
@@ -180,9 +227,27 @@ export const tools: ToolDef[] = [
   },
   {
     name: "navigate",
-    description: "Navigate the tab to a URL. Same-tab navigation.",
-    inputSchema: z.object({ tabId, url: z.string().url() }),
-    handler: (b, i) => b.call("navigate", i, 30000),
+    description:
+      "Navigate the tab to a URL. Same-tab navigation. By default this BLOCKS until the network is quiet (no need to chain waitForStable afterwards). Pass waitForLoad:false to return as soon as navigation starts.",
+    inputSchema: z.object({
+      tabId,
+      url: z.string().url(),
+      waitForLoad: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe(
+          "When true (default), waits for network idle before returning so the next tool call sees the loaded page."
+        ),
+      waitTimeoutMs: z
+        .number()
+        .int()
+        .min(100)
+        .max(60000)
+        .optional()
+        .default(5000),
+    }),
+    handler: (b, i) => b.call("navigate", i, 65000),
   },
   {
     name: "createTab",
