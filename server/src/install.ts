@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { platform, homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
 
@@ -25,7 +25,22 @@ const HOOK_SCRIPT_PATH = join(YOLO_DIR, "browser-routing-hook.sh");
 
 const ROUTING_HEADING = "## Browser routing (yolo-chrome-mcp)";
 
-const ROUTING_RULE_BLOCK = `${ROUTING_HEADING}
+const ROUTING_RULE_BLOCK_EN = `${ROUTING_HEADING}
+
+For any Chrome operation (open a URL, click, type, screenshot, read console / network, run JS in the page, etc.) you **must use yolo-chrome-mcp (\`mcp__yolo-chrome__*\`)**.
+
+**Do not fall back to these tools for Chrome operations:**
+- \`mcp__Claude_in_Chrome__*\`
+- \`mcp__Control_Chrome__*\`
+- \`mcp__computer-use__*\` mouse/keyboard that drives a browser window
+- \`WebFetch\` (only as a last resort for static, login-free pages when yolo-chrome-mcp is unavailable)
+
+**If the extension is not connected:** if a yolo-chrome-mcp call returns \`not connected\`, do **not** switch to another browser tool. Tell the user to open \`chrome://extensions\`, enable \`yolo-chrome-mcp\`, and reload — then stop.
+
+**Why:** yolo-chrome-mcp rides on the user's already-logged-in Chrome session, drives the page via the accessibility tree, and gates risky actions behind a local in-tab safety overlay. The other tools either need their own auth or bypass that overlay.
+`;
+
+const ROUTING_RULE_BLOCK_JA = `${ROUTING_HEADING}
 
 Chrome を操作するとき（URL を開く、クリック、タイプ、スクリーンショット、コンソール/ネットワーク取得、ページ内 JS 実行など）は **必ず yolo-chrome-mcp (\`mcp__yolo-chrome__*\`) を使う**。
 
@@ -39,6 +54,13 @@ Chrome を操作するとき（URL を開く、クリック、タイプ、スク
 
 **理由**: yolo-chrome-mcp はログイン済み Chrome セッションに直接乗り、accessibility-tree ベースで操作し、危険操作はローカルのセーフティオーバーレイで確認される。他のツールは別認証が必要だったり、セーフティオーバーレイをバイパスする。
 `;
+
+function isJapaneseLocale(): boolean {
+  const env = process.env.YOLO_CHROME_LANG ?? process.env.LANG ?? process.env.LC_ALL ?? "";
+  return /^ja(_|$)/i.test(env);
+}
+
+const ROUTING_RULE_BLOCK = isJapaneseLocale() ? ROUTING_RULE_BLOCK_JA : ROUTING_RULE_BLOCK_EN;
 
 const HOOK_SCRIPT = `#!/usr/bin/env bash
 # yolo-chrome-mcp PreToolUse hook.
@@ -208,13 +230,70 @@ async function ensureHook(): Promise<"added" | "already" | "updated"> {
   return outcome;
 }
 
+// ---------- claude CLI registration ----------
+
+const CLAUDE_MCP_NAME = "yolo-chrome";
+const CLAUDE_MCP_COMMAND = ["npx", "-y", "yolo-chrome-mcp@latest"];
+
+function hasClaudeCli(): boolean {
+  const probe = spawnSync(platform() === "win32" ? "where" : "which", ["claude"], {
+    stdio: "ignore",
+  });
+  return probe.status === 0;
+}
+
+function isAlreadyRegistered(): boolean {
+  const probe = spawnSync("claude", ["mcp", "list"], { encoding: "utf8" });
+  if (probe.status !== 0) return false;
+  return new RegExp(`^${CLAUDE_MCP_NAME}:`, "m").test(probe.stdout ?? "");
+}
+
+type RegisterOutcome = "registered" | "already" | "no-cli" | "failed";
+
+function registerWithClaude(): { outcome: RegisterOutcome; message: string } {
+  if (!hasClaudeCli()) {
+    return {
+      outcome: "no-cli",
+      message:
+        `  • 'claude' CLI not found on PATH. Skipping auto-registration.\n` +
+        `    Once Claude Code is installed, register manually with:\n\n` +
+        `        claude mcp add --scope user ${CLAUDE_MCP_NAME} -- ${CLAUDE_MCP_COMMAND.join(" ")}\n`,
+    };
+  }
+  if (isAlreadyRegistered()) {
+    return {
+      outcome: "already",
+      message: `  ✓ '${CLAUDE_MCP_NAME}' is already registered with Claude Code (no change).\n`,
+    };
+  }
+  const res = spawnSync(
+    "claude",
+    ["mcp", "add", "--scope", "user", CLAUDE_MCP_NAME, "--", ...CLAUDE_MCP_COMMAND],
+    { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" }
+  );
+  if (res.status !== 0) {
+    return {
+      outcome: "failed",
+      message:
+        `  ⚠ 'claude mcp add' exited with status ${res.status}.\n` +
+        `    stderr: ${(res.stderr ?? "").trim() || "(empty)"}\n` +
+        `    You can retry manually:\n\n` +
+        `        claude mcp add --scope user ${CLAUDE_MCP_NAME} -- ${CLAUDE_MCP_COMMAND.join(" ")}\n`,
+    };
+  }
+  return {
+    outcome: "registered",
+    message:
+      `  ✓ Registered '${CLAUDE_MCP_NAME}' with Claude Code (--scope user).\n` +
+      `    Command: ${CLAUDE_MCP_COMMAND.join(" ")}\n`,
+  };
+}
+
 // ---------- entry points ----------
 
 export async function runInstall() {
   const dir = resolveExtensionDir();
   const clipboardOk = await copyToClipboard(dir);
-  const node = process.execPath;
-  const serverEntry = fileURLToPath(new URL("./index.js", import.meta.url));
 
   const useStore = CHROME_WEB_STORE_URL.length > 0;
   const step1 = useStore
@@ -247,22 +326,11 @@ yolo-chrome-mcp — install helper
 ================================
 
 ${step1}
-
 Step 2. Register the server with Claude Code
 --------------------------------------------
-  • Run (once). Use --scope user so the server is available in every
-    project, not just the directory you ran the command from:
-
-      claude mcp add --scope user yolo-chrome -- npx -y yolo-chrome-mcp@latest
-
-    Or for a local checkout:
-
-      claude mcp add --scope user yolo-chrome -- ${node} ${serverEntry}
-
-    Without --scope user, the server is only registered for the current
-    project — Claude in other directories will report "Failed to connect".
-
 `);
+  const reg = registerWithClaude();
+  process.stdout.write(reg.message + "\n");
   openUrl(useStore ? CHROME_WEB_STORE_URL : "chrome://extensions");
 
   // Step 3 — interactive routing setup.

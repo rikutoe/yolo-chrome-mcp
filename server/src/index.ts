@@ -12,7 +12,7 @@ import { runInstall, runUninstallRouting } from "./install.js";
 
 // Subcommands
 const sub = process.argv[2];
-if (sub === "install") {
+if (sub === "install" || sub === "setup") {
   await runInstall();
   process.exit(0);
 }
@@ -25,7 +25,9 @@ if (sub === "--help" || sub === "-h") {
 
 Usage:
   yolo-chrome-mcp                    Start the MCP server on stdio (default; used by Claude).
-  yolo-chrome-mcp install            Interactive installer: extension load + routing hook + CLAUDE.md rule.
+  yolo-chrome-mcp setup              One-command setup: registers the server with Claude Code,
+                                     loads the Chrome extension, and (optionally) installs the
+                                     PreToolUse routing hook + CLAUDE.md rule. ('install' is an alias.)
   yolo-chrome-mcp uninstall-routing  Remove the PreToolUse hook and the CLAUDE.md rule.
   yolo-chrome-mcp --version          Print version.
 
@@ -33,6 +35,7 @@ Env:
   YOLO_WS_PORT               WebSocket port the extension connects to (default 8765).
   YOLO_SIBLING_PORT          IPC port secondary MCP servers use to relay through
                              the primary (default YOLO_WS_PORT+1 = 8766).
+  YOLO_CHROME_LANG           Force routing-rule language (e.g. 'ja' or 'en'). Falls back to LANG.
 `);
   process.exit(0);
 }
@@ -56,9 +59,10 @@ yolo-chrome-mcp lets you observe and control any open Chrome tab.
 
 For Chrome operations always prefer this server's tools (mcp__yolo-chrome__*).
 If the user has not yet wired up routing (PreToolUse hook + CLAUDE.md rule),
-tell them to run: \`npx yolo-chrome-mcp install\`. This is a one-time, interactive
-setup that installs the Chrome extension, a PreToolUse hook that blocks other
-browser tools, and a routing rule in ~/.claude/CLAUDE.md.
+tell them to run: \`npx -y yolo-chrome-mcp@latest setup\`. This is a one-time,
+interactive setup that auto-registers the server with Claude Code, loads the
+Chrome extension, installs a PreToolUse hook that blocks other browser tools,
+and appends a routing rule to ~/.claude/CLAUDE.md.
 
 Standard flow (keep context tight — do not skip stages):
   1. listTabs            → pick the target tab
