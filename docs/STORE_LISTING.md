@@ -178,25 +178,28 @@ https://seedx.tech/privacy
 
 ## Screenshots
 
-Required: at least one screenshot at 1280×800 or 640×400.
+1280×800, upload in order. English set in `docs/store-screenshots/`,
+Japanese set (1:1 mirror) in `docs/store-screenshots/ja/`.
 
-Recommended set (saved under `docs/store-screenshots/`):
+| # | File | Message |
+|---|------|---------|
+| 1 | `01-hero.png` | **Yolo mode for Claude in Chrome** — browse for you, no filters / approval pop-ups, one install |
+| 2 | `02-session.png` | **Reads the logged-in pages Claude for Chrome can't** — rides your real session vs. a fresh logged-out browser |
+| 3 | `03-speed.png` | **Submitting forms & changing settings was 10× faster** — benchmark bars, 1.6s vs 17s (illustrative) |
+| 4 | `04-safety.png` | **Make it ask first — or don't. Your call** — optional, local, three modes |
+| 5 | `05-multi.png` | **Many Claude sessions, one Chrome** — primary/secondary, no port conflicts |
 
-1. **`01-popup.png`** — extension popup showing green "接続中"
-   dot + Safety segmented control.
-2. **`02-claude-driving.png`** — Claude Code session calling
-   `mcp__yolo-chrome__screenshot` on a real page, with the result
-   visible in the conversation.
-3. **`03-safety-overlay.png`** — the in-tab safety overlay asking for
-   confirmation on a money-labelled button.
-4. **`04-routing-prompt.png`** — Claude offering to add the routing rule
-   to `~/.claude/CLAUDE.md` via AskUserQuestion.
+Brand: warm off-white bg, amber→red logo gradient, slate ink, orange accent.
+Source HTML lives in `/tmp/store-shots/` (regenerate via the `creative-proposal` skill).
+
+Note on screenshot 3: "10×" is an illustrative single-task comparison
+(footnoted in the image), not a published benchmark.
 
 ---
 
-## Promotional images (optional)
+## Promotional images
 
-- Small tile 440×280 — short tagline "Hand Chrome to Claude"
-- Marquee 1400×560 — only needed if applying for editorial features
+- **Promo tile 440×280** — `image/store-promo-tile-440x280.png` (JA: `image/ja/`)
+- **Marquee 1400×560** — `image/store-marquee-1400x560.png` (JA: `image/ja/`)
 
-Skip both for v1 launch.
+Both refreshed to the current brand with EN + JA variants.
