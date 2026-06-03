@@ -895,7 +895,7 @@ export async function createTab({
 }) {
   const t = await chrome.tabs.create({
     url,
-    active: active ?? true,
+    active: active ?? false,
     ...(windowId !== undefined ? { windowId } : {}),
   });
   return {
