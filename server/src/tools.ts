@@ -266,14 +266,14 @@ export const tools: ToolDef[] = [
   {
     name: "createTab",
     description:
-      "Open a NEW Chrome tab at the given URL and return its tab info. Use this instead of navigate when you want to keep the current tab as-is.",
+      "Open a NEW Chrome tab at the given URL and return its tab info. Use this instead of navigate when you want to keep the current tab as-is. Opens in the BACKGROUND by default so the user's current tab keeps focus; pass active:true only when you specifically need it in the foreground.",
     inputSchema: z.object({
       url: z.string().url(),
       active: z
         .boolean()
         .optional()
-        .default(true)
-        .describe("Whether the new tab should become the foreground tab. Default true."),
+        .default(false)
+        .describe("Whether the new tab should become the foreground tab. Default false (opens in background, keeps the user's current tab focused)."),
       windowId: z
         .number()
         .int()
