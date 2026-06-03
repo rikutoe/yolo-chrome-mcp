@@ -12,6 +12,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # Set as repo secret once the store item exists. Empty = store step is skipped.
+      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +38,19 @@ jobs:
         run: cd server && npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Auto-rollout to the Chrome Web Store. Skipped until CWS_* secrets are set.
+      # One-time setup (token generation, getting the extension ID): docs/STORE_AUTO_ROLLOUT.md
+      - name: Publish to Chrome Web Store
+        if: env.CWS_EXTENSION_ID != ''
+        uses: mnao305/chrome-extension-upload@v5
+        with:
+          file-path: build/yolo-chrome-mcp-extension-${{ github.ref_name }}.zip
+          extension-id: ${{ secrets.CWS_EXTENSION_ID }}
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          publish: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
