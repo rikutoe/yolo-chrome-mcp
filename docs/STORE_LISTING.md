@@ -31,15 +31,33 @@ Hand any open Chrome tab to Claude. Click, type, screenshot, read console — al
 ```
 Yolo Chrome MCP turns your real, logged-in Chrome session into a tool Claude can drive.
 
-▼ IMPORTANT — this extension is one half of the system.
-After installing it, run this one command on your computer (it adds the MCP
-server to Claude and sets up routing so Claude always uses Yolo for Chrome):
+══════════════════════════════════════════
+QUICK START — 3 steps, about 1 minute
+══════════════════════════════════════════
+This extension is only HALF of the system. It needs a small helper
+(the "MCP server") running on your computer so Claude can reach it.
+You set both up like this:
 
-    npx -y yolo-chrome-mcp@latest install --routing-only
+1. Install this extension (you're almost done — just click "Add").
+
+2. Open a terminal on your computer and run this one line:
+
+       npx -y yolo-chrome-mcp@latest install --routing-only
+
+   (Requires Node.js and Claude Code or Claude Desktop. Don't want to
+   type it? Click this extension's icon — the popup has the exact
+   command with a one-click "Copy" button whenever the dot is red.)
+
+3. Restart Claude Code / Claude Desktop. Click the extension icon —
+   when the status dot turns GREEN, you're connected. Now ask Claude
+   to do something with a tab, e.g. "screenshot this page."
+
+That's it. No login, no separate browser, nothing leaves your machine.
+──────────────────────────────────────────
 
 Requires Node.js + Claude Code (or Claude Desktop). The extension popup also
-shows this command with a one-click "Copy" button — open it any time the
-status dot is red.
+shows the install command with a one-click "Copy" button — open it any time
+the status dot is red.
 
 Pair it with the yolo-chrome-mcp server (npm or Claude Desktop) and Claude
 can browse, click, type, screenshot, and read the console / network of any
