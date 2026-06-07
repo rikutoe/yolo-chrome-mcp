@@ -11,6 +11,7 @@
     "build:mcpb": "node scripts/build-mcpb.mjs",
     "build:all": "npm run build && npm run build:mcpb",
     "release:dryrun": "npm run build:all && cd server && npm pack --dry-run",
+    "verify:install": "npm run build:server && node scripts/verify-fresh-install.mjs",
     "start": "node server/dist/index.js",
     "dev:server": "npm run dev -w server"
   }
