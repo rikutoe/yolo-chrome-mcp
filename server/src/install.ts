@@ -27,32 +27,38 @@ const ROUTING_HEADING = "## Browser routing (yolo-chrome-mcp)";
 
 const ROUTING_RULE_BLOCK_EN = `${ROUTING_HEADING}
 
-For any Chrome operation (open a URL, click, type, screenshot, read console / network, run JS in the page, etc.) you **must use yolo-chrome-mcp (\`mcp__yolo-chrome__*\`)**.
+**Default to \`WebSearch\` / \`WebFetch\`.** Use them for any research over public information (product comparisons, pricing, company info, news, reading docs). Don't reach for yolo-chrome-mcp for these — WebSearch is fast, parallelizable, and light on context, whereas yolo-chrome-mcp drives the UI one action at a time and is overkill for research.
 
-**Do not fall back to these tools for Chrome operations:**
+**Use yolo-chrome-mcp (\`mcp__yolo-chrome__*\`) only when:**
+1. The information or action requires driving the UI directly — a logged-in dashboard, a SPA where WebFetch returns empty, submitting a form, DOM manipulation, reading the console / network, etc.
+2. The user explicitly asks you to "open it in the browser" / "do it in Chrome".
+
+**For those UI cases, do not fall back to other browser tools:**
 - \`mcp__Claude_in_Chrome__*\`
 - \`mcp__Control_Chrome__*\`
 - \`mcp__computer-use__*\` mouse/keyboard that drives a browser window
-- \`WebFetch\` (only as a last resort for static, login-free pages when yolo-chrome-mcp is unavailable)
 
 **If the extension is not connected:** if a yolo-chrome-mcp call returns \`not connected\`, do **not** switch to another browser tool. Tell the user to open \`chrome://extensions\`, enable \`yolo-chrome-mcp\`, and reload — then stop.
 
-**Why:** yolo-chrome-mcp rides on the user's already-logged-in Chrome session, drives the page via the accessibility tree, and gates risky actions behind a local in-tab safety overlay. The other tools either need their own auth or bypass that overlay.
+**Why:** yolo-chrome-mcp rides on the user's already-logged-in Chrome session, drives the page via the accessibility tree, and gates risky actions behind a local in-tab safety overlay. For plain public-info research, WebSearch / WebFetch are faster and lighter — pick the tool by purpose.
 `;
 
 const ROUTING_RULE_BLOCK_JA = `${ROUTING_HEADING}
 
-Chrome を操作するとき（URL を開く、クリック、タイプ、スクリーンショット、コンソール/ネットワーク取得、ページ内 JS 実行など）は **必ず yolo-chrome-mcp (\`mcp__yolo-chrome__*\`) を使う**。
+**デフォルトは \`WebSearch\` / \`WebFetch\`。** 公開情報を集めるリサーチ（製品比較、料金調査、企業情報、ニュース、ドキュメント参照など）はこれで完結させる。yolo-chrome-mcp は使わない。WebSearch は速く、並列で叩け、コンテキストも軽い。yolo-chrome-mcp は 1 操作ずつ UI を介すので遅く、調査用途にはオーバーキル。
 
-**使ってはいけないツール**（同じ目的で他のブラウザツールにフォールバックしない）：
+**yolo-chrome-mcp (\`mcp__yolo-chrome__*\`) を使うのは次の場合に限る**：
+1. UI を直接叩かないと取得・操作できない情報（ログイン後の管理画面、WebFetch が空を返す SPA、フォーム送信が必要な処理、DOM 操作、コンソール/ネットワーク確認など）
+2. ユーザーが明示的に「ブラウザで開いて」「Chrome で操作して」等と指示したとき
+
+**上記の UI 用途では他のブラウザツールにフォールバックしない**（同じ目的で代替しない）：
 - \`mcp__Claude_in_Chrome__*\`
 - \`mcp__Control_Chrome__*\`
 - \`mcp__computer-use__*\` のマウス/キーボードでブラウザを動かす操作
-- \`WebFetch\`（ログイン不要の素の静的ページで yolo-chrome-mcp が使えないときの最終手段に限る）
 
-**未接続だったときの動作**: \`not connected\` エラーが出たら、他のツールに切り替えず、ユーザーに「\`chrome://extensions\` で \`yolo-chrome-mcp\` を有効化してリロードしてください」と伝えて止まる。**勝手に他のブラウザツールに切り替えない**。
+**未接続だったときの動作**: yolo-chrome-mcp が \`not connected\` を返したら、他のブラウザツールに切り替えず、ユーザーに「\`chrome://extensions\` で \`yolo-chrome-mcp\` を有効化してリロードしてください」と伝えて止まる。
 
-**理由**: yolo-chrome-mcp はログイン済み Chrome セッションに直接乗り、accessibility-tree ベースで操作し、危険操作はローカルのセーフティオーバーレイで確認される。他のツールは別認証が必要だったり、セーフティオーバーレイをバイパスする。
+**理由**: yolo-chrome-mcp はログイン済み Chrome セッションに直接乗り、accessibility-tree ベースで操作し、危険操作はローカルのセーフティオーバーレイで確認される。一方、単なる公開情報リサーチには WebSearch / WebFetch の方が速く軽い。用途で使い分ける。
 `;
 
 function isJapaneseLocale(): boolean {

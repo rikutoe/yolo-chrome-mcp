@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Yolo Chrome MCP for Claude",
   "short_name": "Yolo Chrome MCP",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Hand any open Chrome tab to Claude. Click, type, screenshot, read console — all on your logged-in browser.",
   "homepage_url": "https://github.com/rikutoe/yolo-chrome-mcp",
   "minimum_chrome_version": "120",
