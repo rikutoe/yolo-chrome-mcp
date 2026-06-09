@@ -14,4 +14,5 @@
   2. Implement the handler in `extension/src/handlers.ts`
   3. Register it in the `handlers` table in `extension/src/background.ts`
   4. Add a case to `scripts/e2e.mjs`
+- Version lives in several files (root/server/extension `package.json`, `extension/manifest.json`). The `.mcpb` bundle version is NOT one of them: `scripts/build-mcpb.mjs` injects the root `package.json` version into the manifest at build time, so the `version` field committed in `mcpb/manifest.json` is just a template and is ignored at build. Don't rely on bumping it; bump the root `package.json`.
 - Distribution: pushing a `v*` tag fires `.github/workflows/release.yml`, which runs `npm publish` and creates a GitHub Release. Requires `NPM_TOKEN` in repo secrets.

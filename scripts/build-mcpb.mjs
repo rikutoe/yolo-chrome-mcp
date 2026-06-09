@@ -19,8 +19,18 @@ await rm(STAGE, { recursive: true, force: true });
 await mkdir(STAGE, { recursive: true });
 await mkdir(OUT_DIR, { recursive: true });
 
-// 1. manifest.json
-await cp(join(ROOT, "mcpb", "manifest.json"), join(STAGE, "manifest.json"));
+// 1. manifest.json — inject the canonical version from the root package.json so
+// the bundle can never ship a stale version (the committed mcpb/manifest.json
+// version is intentionally not trusted here; it's only a template).
+const rootPkg = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
+const mcpbManifest = JSON.parse(
+  await readFile(join(ROOT, "mcpb", "manifest.json"), "utf8")
+);
+mcpbManifest.version = rootPkg.version;
+await writeFile(
+  join(STAGE, "manifest.json"),
+  JSON.stringify(mcpbManifest, null, 2) + "\n"
+);
 
 // 2. server build output
 if (!existsSync(join(ROOT, "server", "dist", "index.js"))) {
