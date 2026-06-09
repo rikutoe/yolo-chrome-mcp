@@ -1,6 +1,6 @@
 {
   "name": "yolo-chrome-mcp",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "MCP server that exposes any open Chrome tab to Claude (paired with a Chrome extension).",
   "license": "MIT",
   "author": "Rikuto Echigoya <rikuto@seedx.tech>",
