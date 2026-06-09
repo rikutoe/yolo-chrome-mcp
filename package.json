@@ -1,6 +1,6 @@
 {
   "name": "yolo-chrome-mcp-monorepo",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "type": "module",
   "workspaces": ["server", "extension", "shared"],
