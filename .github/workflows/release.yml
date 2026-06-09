@@ -43,7 +43,7 @@ jobs:
       # One-time setup (token generation, getting the extension ID): docs/STORE_AUTO_ROLLOUT.md
       - name: Publish to Chrome Web Store
         if: env.CWS_EXTENSION_ID != ''
-        uses: mnao305/chrome-extension-upload@v5
+        uses: mnao305/chrome-extension-upload@v5.0.0
         with:
           file-path: build/yolo-chrome-mcp-extension-${{ github.ref_name }}.zip
           extension-id: ${{ secrets.CWS_EXTENSION_ID }}
