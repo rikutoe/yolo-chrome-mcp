@@ -1,6 +1,8 @@
 // Content script — renders a confirmation banner and resolves yes/no.
 // Re-injected on demand by overlayBridge.
 
+import { getLang, t } from "./i18n.js";
+
 declare const chrome: any;
 
 (() => {
@@ -10,12 +12,21 @@ declare const chrome: any;
   chrome.runtime.onMessage.addListener(
     (msg: any, _sender: any, sendResponse: (r: any) => void) => {
       if (msg?.type !== "yolo-confirm") return false;
-      render(msg.action, msg.details, (allowed: boolean) => sendResponse({ allowed }));
+      void getLang().then((lang) =>
+        render(lang, msg.action, msg.details, (allowed: boolean) =>
+          sendResponse({ allowed })
+        )
+      );
       return true; // keep channel open for async response
     }
   );
 
-  function render(action: string, details: any, done: (allowed: boolean) => void) {
+  function render(
+    lang: "en" | "ja" | "zh",
+    action: string,
+    details: any,
+    done: (allowed: boolean) => void
+  ) {
     const existing = document.getElementById("yolo-confirm-root");
     if (existing) existing.remove();
 
@@ -33,11 +44,11 @@ declare const chrome: any;
     `;
     const html = `
       <div class="wrap">
-        <h3>AIが操作しようとしています: ${escape(action)}</h3>
+        <h3>${escape(t(lang, "overlay_title", { action }))}</h3>
         <pre>${escape(JSON.stringify(details, null, 2))}</pre>
         <div class="row">
-          <button class="deny">拒否</button>
-          <button class="allow">許可</button>
+          <button class="deny">${escape(t(lang, "overlay_deny"))}</button>
+          <button class="allow">${escape(t(lang, "overlay_allow"))}</button>
         </div>
       </div>
     `;

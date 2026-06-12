@@ -32,6 +32,10 @@ export class ExtensionBridge {
   // Primary-only state.
   private extWss: WebSocketServer | null = null;
   private extSocket: WebSocket | null = null;
+  /** Label of the currently connected extension's Chrome profile ("" if unset). */
+  private extLabel: string | null = null;
+  /** When true, the current holder is pinned and refuses non-pin takeovers. */
+  private extPinned = false;
   private siblingWss: WebSocketServer | null = null;
   /** secondaryConnId → its socket */
   private siblingSockets = new Map<string, WebSocket>();
@@ -44,6 +48,8 @@ export class ExtensionBridge {
   // Secondary-only state.
   private siblingClient: WebSocket | null = null;
   private siblingClientReady: Promise<void> | null = null;
+  /** Profile label learned from the primary (secondary doesn't own the socket). */
+  private cachedLabel: string | null = null;
 
   // Shared state: pending local calls (only used in primary).
   private pending = new Map<string, Pending>();
@@ -105,16 +111,18 @@ export class ExtensionBridge {
   private attachExtensionHandlers(): void {
     if (!this.extWss) return;
     this.extWss.on("connection", (ws) => {
-      if (this.extSocket && this.extSocket.readyState === WebSocket.OPEN) {
-        try {
-          this.extSocket.close();
-        } catch {}
-      }
-      this.extSocket = ws;
-      ws.on("message", (raw) => this.onExtensionMessage(String(raw)));
+      // Don't evict the current holder yet — the newcomer must identify itself
+      // via `hello` first, so a *pinned* holder can refuse a non-pin takeover.
+      ws.on("message", (raw) => this.onExtensionMessage(ws, String(raw)));
       ws.on("close", () => {
-        if (this.extSocket === ws) this.extSocket = null;
-        this.failAllPending(new Error("extension disconnected"));
+        // Only the active holder closing matters; a refused newcomer is a no-op.
+        if (this.extSocket === ws) {
+          this.extSocket = null;
+          this.extLabel = null;
+          this.extPinned = false;
+          this.broadcastLabel();
+          this.failAllPending(new Error("extension disconnected"));
+        }
       });
       ws.on("error", () => {
         /* handled via close */
@@ -122,11 +130,54 @@ export class ExtensionBridge {
     });
   }
 
+  /**
+   * A newcomer announced itself. Decide whether it takes over the single
+   * connection. A pinned holder refuses any non-pin claim; a pin claim
+   * overrides anything (including another pin).
+   */
+  private handleHello(ws: WebSocket, pin: boolean, label: string): void {
+    const holder = this.extSocket;
+    const holderActive =
+      !!holder && holder !== ws && holder.readyState === WebSocket.OPEN;
+
+    if (holderActive && this.extPinned && !pin) {
+      // Pinned elsewhere and this isn't a pin override → deny the newcomer.
+      try {
+        ws.send(JSON.stringify({ type: "evicted", reason: "pinned" }));
+      } catch {}
+      try {
+        ws.close();
+      } catch {}
+      return;
+    }
+
+    if (holderActive) {
+      // Newcomer wins. If it's a pin, the loser must stay down (reason "pinned").
+      try {
+        holder!.send(
+          JSON.stringify(pin ? { type: "evicted", reason: "pinned" } : { type: "evicted" })
+        );
+      } catch {}
+      try {
+        holder!.close();
+      } catch {}
+      this.failAllPending(new Error("extension connection changed"));
+    }
+    this.extSocket = ws;
+    this.extLabel = label;
+    this.extPinned = pin;
+    this.broadcastLabel();
+  }
+
   private startSiblingServer(): void {
     const wss = new WebSocketServer({ host: "127.0.0.1", port: this.siblingPort });
     wss.on("connection", (ws) => {
       const connId = randomUUID();
       this.siblingSockets.set(connId, ws);
+      // Catch the new secondary up on the current profile label.
+      try {
+        ws.send(JSON.stringify({ type: "label", label: this.extLabel ?? "" }));
+      } catch {}
       ws.on("message", (raw) => this.onSiblingMessage(connId, String(raw)));
       ws.on("close", () => {
         this.siblingSockets.delete(connId);
@@ -229,14 +280,24 @@ export class ExtensionBridge {
     });
   }
 
-  private onExtensionMessage(raw: string): void {
-    let msg: WireMessage;
+  private onExtensionMessage(ws: WebSocket, raw: string): void {
+    let msg: any;
     try {
       msg = JSON.parse(raw);
     } catch {
       return;
     }
+    if (msg.type === "hello") {
+      this.handleHello(ws, !!msg.pin, msg.label ?? "");
+      return;
+    }
+    if (msg.type === "pin") {
+      // The current holder toggled its pin state.
+      if (ws === this.extSocket) this.extPinned = !!msg.pinned;
+      return;
+    }
     if (msg.type !== "rpc-result") return;
+    if (ws !== this.extSocket) return; // ignore stragglers from a refused socket
 
     // Result from a sibling's request?
     const route = this.siblingRouting.get(msg.id);
@@ -316,6 +377,10 @@ export class ExtensionBridge {
     } catch {
       return;
     }
+    if (msg?.type === "label") {
+      this.cachedLabel = msg.label ?? "";
+      return;
+    }
     if (msg?.type !== "rpc-result") return;
     const p = this.pending.get(msg.id);
     if (!p) return;
@@ -326,6 +391,31 @@ export class ExtensionBridge {
   }
 
   // ---- shared ------------------------------------------------------------
+
+  /**
+   * Label of the Chrome profile currently driving the extension, or null when
+   * no extension is connected. Empty string means connected but unnamed.
+   */
+  getProfileLabel(): string | null {
+    if (this.role === "primary") {
+      return this.extSocket?.readyState === WebSocket.OPEN ? this.extLabel ?? "" : null;
+    }
+    if (this.role === "secondary") {
+      return this.siblingClient?.readyState === WebSocket.OPEN ? this.cachedLabel : null;
+    }
+    return null;
+  }
+
+  private broadcastLabel(): void {
+    const payload = JSON.stringify({ type: "label", label: this.extLabel ?? "" });
+    for (const [, sock] of this.siblingSockets) {
+      if (sock.readyState === WebSocket.OPEN) {
+        try {
+          sock.send(payload);
+        } catch {}
+      }
+    }
+  }
 
   private failAllPending(err: Error): void {
     for (const [, p] of this.pending) {

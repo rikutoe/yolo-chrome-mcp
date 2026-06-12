@@ -117,6 +117,11 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     const result = await tool.handler(bridge, parsed.data);
     const durationMs = Date.now() - t0;
+    // Tell the AI which Chrome profile it just acted on, so it can surface
+    // "you're connected to <profile>" to the user. null = unknown/not connected.
+    const label = bridge.getProfileLabel();
+    const profileTag =
+      label !== null ? `[profile] ${label || "(名前未設定)"}` : null;
     // Screenshot returns image; wrap in MCP content shape.
     if (
       tool.name === "screenshot" &&
@@ -134,6 +139,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (PERF_ON) {
         content.push({ type: "text", text: `[perf] ${tool.name} ${durationMs}ms` });
       }
+      if (profileTag) content.push({ type: "text", text: profileTag });
       return { content };
     }
     // Keep the primary payload shape identical to what the handler returned (so array
@@ -146,6 +152,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (PERF_ON) {
       content.push({ type: "text", text: `[perf] ${tool.name} ${durationMs}ms` });
     }
+    if (profileTag) content.push({ type: "text", text: profileTag });
     return { content };
   } catch (err: any) {
     const durationMs = Date.now() - t0;

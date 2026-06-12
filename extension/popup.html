@@ -17,6 +17,7 @@
     --ok-bg: rgba(16, 185, 129, 0.12);
     --err: #ef4444;
     --err-bg: rgba(239, 68, 68, 0.12);
+    --idle: #9ca3af;
     --radius: 10px;
     --radius-sm: 6px;
   }
@@ -111,6 +112,7 @@
     background: var(--err);
   }
   .dot.on { background: var(--ok); }
+  .dot.idle { background: var(--idle); }
   .dot.on::after {
     content: "";
     position: absolute;
@@ -177,6 +179,58 @@
     color: var(--muted);
     margin-top: 8px;
     line-height: 1.45;
+  }
+
+  .icon-button {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: var(--subtle);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .icon-button:hover { background: var(--surface-hover); color: var(--muted); }
+  .icon-button:active { transform: translateY(1px); }
+  .icon-button svg { width: 16px; height: 16px; }
+  .icon-button.pinned {
+    color: var(--accent-fg);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .icon-button.pinned svg { fill: var(--accent-fg); }
+
+  .lang-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .lang-select {
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    cursor: pointer;
+    outline: none;
+  }
+  .lang-select:focus { border-color: var(--accent); }
+
+  .account-email {
+    display: block;
+    margin-top: 2px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    word-break: break-all;
   }
 
   .button {
@@ -259,7 +313,7 @@
   <div class="header">
     <div class="brand">
       <div class="logo">Y</div>
-      <h1>yolo-chrome-mcp</h1>
+      <h1>Yolo Chrome MCP</h1>
     </div>
     <span class="version" id="version">v0.1.0</span>
   </div>
@@ -269,38 +323,48 @@
       <div class="dot-wrap"><div id="dot" class="dot"></div></div>
       <div class="status-text">
         <span id="text">確認中…</span>
-        <span class="sub" id="sub">MCP サーバを探しています</span>
+        <span class="account-email" id="accountEmail">—</span>
       </div>
+      <button class="icon-button" id="pin" title="接続先を固定" aria-label="接続先を固定">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+      </button>
     </div>
+    <div class="mode-hint" id="sub">MCP サーバを探しています</div>
+    <div class="mode-hint" id="pinDefaultHint" data-i18n="pin_default_hint"></div>
+    <div class="mode-hint" id="pinHint" data-i18n="pin_hint" hidden></div>
+    <div class="mode-hint" id="claimHint" data-i18n="claim_hint" hidden></div>
   </div>
 
   <div class="card" id="setupCard" hidden>
-    <div class="section-label">セットアップ</div>
-    <p class="setup-desc">
+    <div class="section-label" data-i18n="label_setup">セットアップ</div>
+    <p class="setup-desc" data-i18n="setup_desc">
       この拡張だけでは動きません。ターミナルで下のコマンドを一度実行して、ローカルの MCP サーバと Claude を接続してください。
     </p>
     <pre class="cmd-block" id="cmdBlock">npx -y yolo-chrome-mcp@latest install --routing-only</pre>
     <button class="button primary" id="copyCmd">
-      <span id="copyLabel">コマンドをコピー</span>
+      <span id="copyLabel" data-i18n="btn_copy">コマンドをコピー</span>
     </button>
-    <p class="setup-hint">
+    <p class="setup-hint" data-i18n="setup_hint">
       実行後、Claude Code / Claude Desktop を再起動するとここが緑になります。
       Node.js と Claude Code（または Claude Desktop）が必要です。
     </p>
   </div>
 
   <div class="card">
-    <div class="section-label">セーフティ</div>
+    <div class="section-label" data-i18n="label_safety">セーフティ</div>
     <div class="segmented" role="radiogroup" aria-label="Safety mode">
       <input type="radio" name="safety" id="safety-always" value="always" />
-      <label for="safety-always">全確認</label>
+      <label for="safety-always" data-i18n="safety_all">全確認</label>
       <input type="radio" name="safety" id="safety-dangerous" value="dangerous-only" checked />
-      <label for="safety-dangerous">推奨</label>
+      <label for="safety-dangerous" data-i18n="safety_recommended">推奨</label>
       <input type="radio" name="safety" id="safety-off" value="off" />
-      <label for="safety-off">オフ</label>
+      <label for="safety-off" data-i18n="safety_off">オフ</label>
     </div>
     <div class="mode-hint" id="modeHint">
-      決済・退会・パスワード送信・危険な evalJs のみ確認します。
+      決済・退会・パスワード送信・危険な操作のみ確認します。
     </div>
   </div>
 
@@ -310,8 +374,18 @@
         <path d="M2 8a6 6 0 0 1 10.5-4M14 8a6 6 0 0 1-10.5 4" />
         <path d="M12 2v3h-3M4 14v-3h3" />
       </svg>
-      <span>再接続</span>
+      <span id="reconnectLabel">このプロファイルで接続</span>
     </button>
+  </div>
+
+  <div class="card lang-row">
+    <span class="section-label" data-i18n="label_language" style="margin-bottom:0;">言語</span>
+    <select id="lang" class="lang-select">
+      <option value="auto" data-i18n="lang_auto">🌐 自動</option>
+      <option value="en">🇺🇸 English</option>
+      <option value="ja">🇯🇵 日本語</option>
+      <option value="zh">🇨🇳 中文</option>
+    </select>
   </div>
 
   <div class="footer">

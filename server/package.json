@@ -1,6 +1,6 @@
 {
   "name": "yolo-chrome-mcp",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "MCP server that exposes any open Chrome tab to Claude (paired with a Chrome extension).",
   "license": "MIT",
   "author": "Rikuto Echigoya <rikuto@seedx.tech>",
@@ -10,7 +10,14 @@
   },
   "homepage": "https://github.com/rikutoe/yolo-chrome-mcp",
   "bugs": "https://github.com/rikutoe/yolo-chrome-mcp/issues",
-  "keywords": ["mcp", "model-context-protocol", "chrome", "browser", "automation", "claude"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "chrome",
+    "browser",
+    "automation",
+    "claude"
+  ],
   "type": "module",
   "bin": {
     "yolo-chrome-mcp": "dist/index.js"
