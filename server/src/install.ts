@@ -8,11 +8,11 @@ import { createInterface } from "node:readline/promises";
 
 // ---------- constants ----------
 
-// Chrome Web Store URL. Empty until the listing is approved — the install
-// helper then falls back to "Load unpacked". Once the listing is live, set
-// this to the canonical https://chromewebstore.google.com/... link so users
-// get the one-click flow.
-const CHROME_WEB_STORE_URL = process.env.YOLO_CHROME_WEB_STORE_URL ?? "";
+// Chrome Web Store URL. The listing is live, so the install helper offers the
+// one-click store flow by default; override via YOLO_CHROME_WEB_STORE_URL.
+const CHROME_WEB_STORE_URL =
+  process.env.YOLO_CHROME_WEB_STORE_URL ??
+  "https://chromewebstore.google.com/detail/cdloaaloamgpckmnepjadmaahemdhjoj";
 
 // ---------- paths ----------
 
