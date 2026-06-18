@@ -1,0 +1,14 @@
+{
+  "appName": {
+    "message": "Yolo Chrome MCP for Claude",
+    "description": "Extension name shown in chrome://extensions and the Web Store."
+  },
+  "appShortName": {
+    "message": "Yolo Chrome MCP",
+    "description": "Short name used where space is limited."
+  },
+  "appDescription": {
+    "message": "公式ツールのような厳しいブロックや承認ポップアップなし。Yoloはフィルタなしで全サイトをClaudeに操作させ、無料で使えます。",
+    "description": "Store / extensions-page description. Max 132 chars."
+  }
+}

@@ -19,10 +19,10 @@ Yolo Chrome MCP for Claude
 ## Short description (max 132 chars)
 
 ```
-Hand any open Chrome tab to Claude. Click, type, screenshot, read console — all on your already-logged-in browser session.
+No blocked sites, no filters, no approval pop-ups. Yolo lets Claude work on every website on your real Chrome — free.
 ```
 
-(123 chars)
+(117 chars)
 
 ---
 
@@ -30,6 +30,17 @@ Hand any open Chrome tab to Claude. Click, type, screenshot, read console — al
 
 ```
 Yolo Chrome MCP turns your real, logged-in Chrome session into a tool Claude can drive.
+
+Why people pick it:
+• Free, and works on every website — no filters, no allowlist, no
+  approval pop-ups, no "this site is blocked." Official browser tools
+  strictly block banking, Google properties, and anything they deem
+  sensitive; Yolo just drives your own open tab, so every page works.
+• Token-efficient and fast — it prefers cheap structured reads over
+  screenshots and acts on the tab you already have open, so tasks run
+  in seconds and burn a fraction of the context.
+• Multi-profile aware — run several Chrome people/profiles at once and
+  pin exactly which one the AI drives; many Claude sessions, one Chrome.
 
 ══════════════════════════════════════════
 QUICK START — 3 steps, about 1 minute
@@ -66,6 +77,28 @@ without re-authenticating, and without leaving your computer.
 
 It is the lowest-friction way to give Claude an "eyes and hands" on the
 exact pages you are working with.
+
+— Why people switch to it —
+• Free, and no more blocked sites. Official AI browser tools enforce
+  strict filtering — they refuse banking, some Google properties, pages
+  behind bot-protection, and anything flagged "sensitive," and pepper
+  you with approval pop-ups. Yolo drops the filters: it drives your own
+  already-open tab through the same DevTools Protocol the browser itself
+  uses, so every page you actually work on just works. No allowlist, no
+  silent refusals, free to use.
+• Token-efficient by design. Claude is told to reach for the cheapest
+  tool first — the page's accessibility tree instead of a screenshot,
+  filtered console/network logs instead of full dumps — so each step
+  spends a fraction of the context a vision-heavy agent burns. Longer
+  tasks before you hit the limit, lower cost per run.
+• Fast. It acts on the tab you already have open and logged in — no
+  spawning a fresh headless browser, no re-authenticating, no page
+  reloads you didn't ask for. Single tasks like submitting a form or
+  changing a setting land in ~1–2s instead of ~15s+.
+• Works across multiple Chrome profiles. Keep your work, personal, and
+  client Chrome "people" open at once — pin exactly which profile the
+  AI drives, or let it follow whichever window you focus. Several
+  concurrent Claude sessions share one Chrome with no port conflicts.
 
 — What you can do —
 • "Take a screenshot of my Stripe dashboard and tell me what's wrong"
@@ -123,6 +156,101 @@ License: MIT
 Bugs / requests: https://github.com/rikutoe/yolo-chrome-mcp/issues
 
 Privacy policy: https://seedx.tech/privacy
+```
+
+### Detailed description — 日本語 (ja locale)
+
+```
+Yolo Chrome MCP は、ログイン済みのいつもの Chrome を、Claude が操作できる「目と手」に変えます。
+
+══════════════════════════════════════════
+クイックスタート — 3ステップ、約1分
+══════════════════════════════════════════
+この拡張は仕組みの「半分」です。Claude から届くように、お使いの
+PC で小さな補助プログラム（MCP サーバ）を動かす必要があります。
+両方をこう設定します。
+
+1. この拡張をインストール（あと少し、「追加」を押すだけ）。
+
+2. ターミナルを開いて、次の1行を実行：
+
+       npx -y yolo-chrome-mcp@latest install --routing-only
+
+   （Node.js と Claude Code または Claude Desktop が必要です。入力が
+   面倒なら、拡張アイコンをクリック。ドットが赤いときはポップアップに
+   ワンクリックの「コピー」付きでコマンドが出ます。）
+
+3. Claude Code / Claude Desktop を再起動。拡張アイコンをクリックして
+   ステータスのドットが緑になれば接続完了。あとは「このページを
+   スクショして」のように頼むだけ。
+
+以上です。ログイン不要、別ブラウザ不要、データは一切外に出ません。
+──────────────────────────────────────────
+
+なぜ選ばれるか：
+• 無料、そして全サイトで動く — フィルタなし、許可リストなし、承認
+  ポップアップなし、「このサイトはブロックされています」もなし。
+  公式のブラウザ系ツールは銀行・一部の Google サービス・機微と判断
+  したサイトを厳しく弾きますが、Yolo は今開いているあなた自身の
+  タブを操作するので、実際に使うページがそのまま動きます。
+• トークン効率重視で速い — スクショより軽い構造データや、絞り込んだ
+  ログを優先するので、1ステップあたりの消費はわずか。長いタスクも
+  最後まで回せて、1回あたりのコストも低く抑えられます。
+• 複数の Chrome プロフィールに対応 — 仕事用・個人用・クライアント用の
+  Chrome を同時に開いたまま、AI が操作する先をピン留めできます。
+  複数の Claude セッションが1つの Chrome を取り合わずに共有します。
+
+— できること —
+• 「Stripe のダッシュボードをスクショして、何が問題か教えて」
+• 「Linear を開いて今日の issue をトリアージして」
+• 「この React アプリのコンソールエラーを読んで原因を特定して」
+• 「このフォームを私の情報で埋めて。送信の直前で止めて」
+• 「この3つのタブの Polymarket の価格を比較して」
+• 「Gmail を開いて未読10件を要約して」
+
+— 仕組み —
+1. この拡張をインストール。PC 内のローカル WebSocket
+   （127.0.0.1、外部通信なし）に接続します。
+2. 上記の1行コマンドを実行。MCP サーバを Claude に登録し、ルーティング
+   用のフックと CLAUDE.md ルールを入れ、Claude がブラウザを使うときに
+   必ず Yolo を選ぶようにします。
+3. Claude Code / Claude Desktop を再起動。Claude がサーバを起動すると
+   ポップアップのドットが緑になります。
+4. タブの操作を依頼すると、Claude → サーバ → この拡張 の順に伝わり、
+   拡張が DevTools Protocol でタブを操作し、結果が Claude に返ります。
+
+— 19のツール、デフォルトで軽量 —
+listTabs・getTabInfo・screenshot・getPageText・getInteractables・
+click・type・scroll・navigate・createTab・closeTab・evalJs・
+waitForStable・getConsoleLogs・getNetworkActivity・getNetworkRequest・
+getStorage・getSourceAt・setSafetyMode
+
+Claude が用途に応じて最も安いツールを選ぶよう設計（スクショより
+アクセシビリティツリー、全ログより絞り込みログ）。会話のコンテキストを
+小さく保ちます。
+
+— セーフティのオーバーレイ —
+機微な操作の前に、ローカルで表示される確認バナーが出ます：決済・購入、
+アカウント削除、パスワードフォームの送信、カード番号やパスワードの入力、
+cookie / fetch / localStorage を触る危険な JavaScript。通常のナビ
+ゲーションやクリックは確認なしで通ります。ポップアップから設定可能。
+
+— 複数セッションでも安全 —
+同じ PC 上の複数の Claude Code セッションが、primary/secondary 方式で
+1つの拡張を共有します。ポート競合や「接続失敗」は起きません。
+
+— この拡張がやらないこと —
+• 第三者サーバへのデータ送信は一切しません。すべて 127.0.0.1 だけを
+  通ります。
+• AI からの明示的な要求なしに、裏でタブを読むことはありません。
+• 解析やテレメトリは含みません。
+
+— オープンソース —
+ソース: https://github.com/rikutoe/yolo-chrome-mcp
+ライセンス: MIT
+バグ・要望: https://github.com/rikutoe/yolo-chrome-mcp/issues
+
+プライバシーポリシー: https://seedx.tech/privacy
 ```
 
 ---

@@ -104,6 +104,7 @@ function connect(userInitiated = false) {
     } else {
       try {
         reply.result = await handler(msg.params ?? {});
+        void bumpUsage();
       } catch (e: any) {
         reply.error = { message: e?.message ?? String(e) };
       }
@@ -112,6 +113,18 @@ function connect(userInitiated = false) {
       socket?.send(JSON.stringify(reply));
     } catch {}
   });
+}
+
+// Count successful AI-driven actions so the popup can ask happy, engaged
+// users (10+ actions) for a Chrome Web Store review. Stops counting once the
+// user has reviewed or dismissed the ask.
+async function bumpUsage() {
+  try {
+    const { usageCount = 0, reviewDone } =
+      await chrome.storage.local.get(["usageCount", "reviewDone"]);
+    if (reviewDone) return;
+    await chrome.storage.local.set({ usageCount: usageCount + 1 });
+  } catch {}
 }
 
 function scheduleReconnect() {
