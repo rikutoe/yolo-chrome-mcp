@@ -17,6 +17,22 @@ const cmdBlock = document.getElementById("cmdBlock")! as HTMLPreElement;
 const copyCmd = document.getElementById("copyCmd")!;
 const copyLabel = document.getElementById("copyLabel")!;
 const langSelect = document.getElementById("lang")! as HTMLSelectElement;
+const reviewCard = document.getElementById("reviewCard")! as HTMLDivElement;
+const reviewCta = document.getElementById("reviewCta")!;
+const reviewLater = document.getElementById("reviewLater")!;
+
+// Ask engaged users (10+ AI-driven actions) for a Web Store review, once.
+const REVIEW_THRESHOLD = 10;
+
+async function maybeShowReview() {
+  try {
+    const { usageCount = 0, reviewDone } =
+      await chrome.storage.local.get(["usageCount", "reviewDone"]);
+    reviewCard.hidden = !(usageCount >= REVIEW_THRESHOLD && !reviewDone);
+  } catch {
+    reviewCard.hidden = true;
+  }
+}
 
 const safetyInputs = Array.from(
   document.querySelectorAll<HTMLInputElement>('input[name="safety"]')
@@ -98,6 +114,7 @@ async function refresh() {
     setState("off");
     sub.textContent = t(lang, "sub_reload");
   }
+  void maybeShowReview();
 }
 
 function setHint(mode: string) {
@@ -153,6 +170,23 @@ function setHint(mode: string) {
     renderState();
     await chrome.runtime.sendMessage({ type: "setPin", pinned: next });
     refresh();
+  });
+
+  reviewCta.addEventListener("click", async () => {
+    const url = `https://chromewebstore.google.com/detail/${chrome.runtime.id}/reviews`;
+    await chrome.storage.local.set({ reviewDone: true });
+    reviewCard.hidden = true;
+    try {
+      await chrome.tabs.create({ url });
+    } catch {
+      window.open(url, "_blank");
+    }
+  });
+
+  reviewLater.addEventListener("click", async () => {
+    // Reset the counter so the ask reappears after another 10 actions.
+    await chrome.storage.local.set({ usageCount: 0 });
+    reviewCard.hidden = true;
   });
 
   copyCmd.addEventListener("click", async () => {
