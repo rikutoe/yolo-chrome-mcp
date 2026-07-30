@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/server";
+import {
+  Server,
+  type CallToolRequest,
+  type CallToolResult,
+} from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { zodToJsonSchema } from "./zodToJsonSchema.js";
 import { ExtensionBridge } from "./bridge.js";
@@ -85,24 +89,22 @@ The extension must be installed and running. If a tool returns a 'not connected'
 ask the user to open chrome://extensions, ensure 'yolo-chrome-mcp' is enabled, and reload.
 `.trim();
 
-const server = new Server(
-  { name: "yolo-chrome-mcp", version: "0.1.0" },
-  { capabilities: { tools: {} }, instructions }
-);
-
-server.setRequestHandler("tools/list", async () => ({
+const listTools = async () => ({
   tools: tools.map((t) => ({
     name: t.name,
     description: t.description,
     inputSchema: zodToJsonSchema(t.inputSchema),
   })),
-}));
+});
 
 // Latency is attached to every successful response so the AI can see, per tool call,
 // how long the round-trip actually took. `YOLO_PERF=0` opts out.
 const PERF_ON = process.env.YOLO_PERF !== "0";
 
-server.setRequestHandler("tools/call", async (req) => {
+// The return type is explicit because the handler is no longer an inline
+// argument to setRequestHandler: without it the `type: "text"` literals widen
+// to `string` and stop matching the SDK's content union.
+const callTool = async (req: CallToolRequest): Promise<CallToolResult> => {
   const tool = tools.find((t) => t.name === req.params.name);
   if (!tool) throw new Error(`Unknown tool: ${req.params.name}`);
   const parsed = tool.inputSchema.safeParse(req.params.arguments ?? {});
@@ -158,14 +160,30 @@ server.setRequestHandler("tools/call", async (req) => {
       content: [{ type: "text", text: `Error${perfTag}: ${err?.message ?? String(err)}` }],
     };
   }
-});
+};
 
 // Protocol revision 2026-07-28 removed the initialize handshake, so a
 // connection's opening message decides which era it speaks. serveStdio owns
-// that decision and the transport lifetime, pinning one instance from this
-// factory for the connection. `legacy` stays at its default 'serve', so
-// clients that still open with `initialize` keep working unchanged.
-serveStdio(() => server);
+// that decision and the transport lifetime. `legacy` stays at its default
+// 'serve', so clients that still open with `initialize` keep working.
+//
+// The factory MUST return a FRESH Server on every call. The SDK connects a
+// modern probe instance to answer `server/discover`, then discards it by
+// CLOSING it if the same connection afterwards falls back to a 2025-era
+// opening. Handing back one shared instance made that discard close the live
+// server, and the lifecycle hook below then killed the whole process
+// mid-connection.
+function createServer(): Server {
+  const server = new Server(
+    { name: "yolo-chrome-mcp", version: "0.1.0" },
+    { capabilities: { tools: {} }, instructions }
+  );
+  server.setRequestHandler("tools/list", listTools);
+  server.setRequestHandler("tools/call", callTool);
+  return server;
+}
+
+serveStdio(createServer);
 
 // Role + readiness messages are emitted from inside bridge.init().
 
@@ -193,7 +211,9 @@ function shutdown(reason: string): void {
   process.exit(0);
 }
 
-server.onclose = () => shutdown("transport closed");
+// No `server.onclose` hook here on purpose: under serveStdio a Server instance
+// can be a throwaway probe, so its close says nothing about the process. The
+// stdin lifelines below cover a real client going away.
 process.stdin.on("end", () => shutdown("stdin closed"));
 process.stdin.on("close", () => shutdown("stdin closed"));
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {

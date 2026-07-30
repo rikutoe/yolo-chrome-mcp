@@ -19,6 +19,9 @@
     "claude"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "yolo-chrome-mcp": "dist/index.js"
   },
