@@ -196,8 +196,13 @@ serveStdio(createServer);
 // the strength of the upgrade alone. The server has to watch its own
 // lifelines:
 //   1. stdin 'end'/'close'    → the client exited and the pipe drained
-//   2. SIGINT/SIGTERM/SIGHUP  → terminal or session teardown
-//   3. ppid becomes 1         → parent died without our stdin ever closing
+//   2. stdout 'error'/'close' → the client stopped reading us (EPIPE) while
+//      still holding our stdin open. Under v1 this killed the process anyway,
+//      as an unhandled EPIPE 'error' event; v2 routes transport errors through
+//      its own handler, so without this line the process survives a dead
+//      client and leaks exactly the orphan this block exists to prevent.
+//   3. SIGINT/SIGTERM/SIGHUP  → terminal or session teardown
+//   4. ppid becomes 1         → parent died without our stdin ever closing
 //      (e.g. the npx wrapper was SIGKILLed). No-op where orphans are
 //      reparented to a subreaper instead of PID 1 — stdin EOF covers those.
 let shuttingDown = false;
@@ -212,10 +217,13 @@ function shutdown(reason: string): void {
 }
 
 // No `server.onclose` hook here on purpose: under serveStdio a Server instance
-// can be a throwaway probe, so its close says nothing about the process. The
-// stdin lifelines below cover a real client going away.
+// can be a throwaway probe — the SDK closes one it discards — so its close says
+// nothing about the process. These stream hooks are process-level instead, and
+// therefore fire only for the real connection.
 process.stdin.on("end", () => shutdown("stdin closed"));
 process.stdin.on("close", () => shutdown("stdin closed"));
+process.stdout.on("error", () => shutdown("stdout closed"));
+process.stdout.on("close", () => shutdown("stdout closed"));
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(sig, () => shutdown(sig));
 }

@@ -97,6 +97,45 @@ async function testStdinClose() {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 
+// ---- 1b. stdout reader gone → exit -----------------------------------------
+// A client can stop reading us while still holding our stdin open: its session
+// reader dies, or a supervisor tears down only the response side. Then stdin
+// never EOFs, no signal arrives, and ppid stays live — the one case the other
+// three lifelines cannot see. Under the v1 SDK an unhandled EPIPE took the
+// process down by accident; v2 handles transport errors itself, so the stdout
+// hooks in index.ts are the only thing standing between this and an orphan.
+async function testStdoutClose() {
+  process.stdout.write("stdout reader gone → server exits:\n");
+  const child = spawnServer(BASE_PORT + 30);
+  const up = await waitForStderr(child, /primary on ws:/, 5000);
+  report("server came up as primary", up);
+
+  child.stdout.destroy();
+  await sleep(200);
+  // Make the server write, so the broken stdout actually surfaces.
+  child.stdin.write(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "lifecycle", version: "0.0.0" },
+      },
+    }) + "\n"
+  );
+
+  const code = await waitForExit(child, 5000);
+  report(
+    "exits once the stdout reader goes away",
+    code !== null,
+    code === null ? "still alive (orphan!)" : `exit code ${code}`
+  );
+  report("exit code is 0", code === 0, `got ${code}`);
+  if (child.exitCode === null) child.kill("SIGKILL");
+}
+
 // ---- 2. primary exit → secondary promotes ----------------------------------
 async function testSecondaryPromotion() {
   process.stdout.write("primary exits → secondary promotes:\n");
@@ -176,6 +215,7 @@ async function testPpidWatchdog() {
 }
 
 await testStdinClose();
+await testStdoutClose();
 await testSecondaryPromotion();
 await testPpidWatchdog();
 
