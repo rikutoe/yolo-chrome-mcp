@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { Server } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { zodToJsonSchema } from "./zodToJsonSchema.js";
 import { ExtensionBridge } from "./bridge.js";
 import { tools } from "./tools.js";
@@ -94,7 +90,7 @@ const server = new Server(
   { capabilities: { tools: {} }, instructions }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler("tools/list", async () => ({
   tools: tools.map((t) => ({
     name: t.name,
     description: t.description,
@@ -106,7 +102,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 // how long the round-trip actually took. `YOLO_PERF=0` opts out.
 const PERF_ON = process.env.YOLO_PERF !== "0";
 
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+server.setRequestHandler("tools/call", async (req) => {
   const tool = tools.find((t) => t.name === req.params.name);
   if (!tool) throw new Error(`Unknown tool: ${req.params.name}`);
   const parsed = tool.inputSchema.safeParse(req.params.arguments ?? {});
@@ -164,8 +160,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+// Protocol revision 2026-07-28 removed the initialize handshake, so a
+// connection's opening message decides which era it speaks. serveStdio owns
+// that decision and the transport lifetime, pinning one instance from this
+// factory for the connection. `legacy` stays at its default 'serve', so
+// clients that still open with `initialize` keep working unchanged.
+serveStdio(() => server);
 
 // Role + readiness messages are emitted from inside bridge.init().
 
@@ -174,7 +174,9 @@ await server.connect(transport);
 // without an explicit shutdown path this process outlives its MCP client and
 // accumulates as a PPID-1 orphan — one per finished Claude/codex session.
 // The SDK's StdioServerTransport only subscribes to stdin 'data'/'error' and
-// never notices EOF, so the server has to watch its own lifelines:
+// never notices EOF — still true in the v2 SDK, so do not drop this block on
+// the strength of the upgrade alone. The server has to watch its own
+// lifelines:
 //   1. stdin 'end'/'close'    → the client exited and the pipe drained
 //   2. SIGINT/SIGTERM/SIGHUP  → terminal or session teardown
 //   3. ppid becomes 1         → parent died without our stdin ever closing

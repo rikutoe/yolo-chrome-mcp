@@ -34,7 +34,7 @@
     "prepack": "node prepack.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/server": "2.0.0",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
