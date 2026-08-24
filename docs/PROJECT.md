@@ -11,23 +11,21 @@ Existing Chrome MCPs each have gaps: read-only, can't carry over login state, or
 ### Goal
 - 22 tools work against a real Chrome tab from Claude Code ✅
 - Destructive actions are gated by an in-tab confirmation overlay ✅
-- Three distribution channels (npm/npx, MCPB, GitHub Release zip) are operational ✅
+- Four distribution channels (npm/npx, MCPB, GitHub Release zip, Chrome Web Store) are operational ✅
 - Published on npm — `claude mcp add yolo-chrome -- npx -y yolo-chrome-mcp@latest` works ✅
 - Realistic end-to-end flows (navigate → scroll → click → form-fill) finish in well under 15s on a heavy injected DOM ✅ (currently ~2.6s on the bench)
 
 ### Out of Scope
-- Multiple Chrome profiles / switching user sessions
 - Headless Chrome (this MCP targets the Chrome the user is already using)
-- Chrome Web Store listing (for now: GitHub Release zip + unpacked load)
 
 ## Current Phase
 - Phase 1: Implementation (extension + MCP server + safety overlay) ✅
 - Phase 2: Distribution pipeline (npm + MCPB + Actions) ✅
-- Phase 3: First public release (v0.1.0 → v0.2.3 tagged) ✅
+- Phase 3: Public distribution (v0.1.0 → v0.3.1, npm + Chrome Web Store) ✅
 - **Phase 4: Adoption and improvement** ← current (perf + Web Component reliability)
 
 ## Next
-- [ ] Tag v0.2.4 once the Web-Component findings ship (clickStrategy is in main, awaiting in-the-wild verification of the Monetization-radio bug)
+- [ ] Verify the Web-Component monetization flow in the wild → [detail](tasks/web-component-click-reliability.md)
 
 ## Architecture
 
@@ -48,8 +46,9 @@ server/                Node + TypeScript MCP server
   prepack.mjs          Copies ../extension/dist into ./extension before publish
 
 extension/             MV3 Chrome extension
-  manifest.json        permissions: tabs/debugger/storage/scripting/cookies/alarms
-  src/background.ts    WS client + handler routing + alarms keepalive
+  manifest.json        permissions: tabs/debugger/storage/scripting/cookies/alarms/identity
+  src/background.ts    WS client + handler routing + lifecycle/alarm integration
+  src/reconnect.ts     Deduplicated reconnect scheduling + capped backoff
   src/cdp.ts           Thin chrome.debugger wrapper
   src/session.ts       Per-tab CDP attach + console/network ring buffers
   src/handlers.ts      Handler implementations for all 22 tools
@@ -84,8 +83,8 @@ scripts/bench-flow.mjs Performance bench: browse → scroll → click → form-f
 - **D3: DOM is exposed as accessibility-tree interactables, not raw HTML** — role/label/stableId/coords are enough. (2026-05-14)
 - **D4: WS is single-client at the extension layer, but the MCP server is multi-session via primary/secondary** — One 1:1 connection between the extension and a single MCP server (the *primary*, which owns the extension port — default 8765). Additional MCP server processes (one per concurrent Claude Code session) detect EADDRINUSE, become *secondaries*, and relay calls to the primary over a sibling-IPC port (default 8766). If the primary dies, secondaries race to bind 8765; the winner is promoted to primary and the rest reconnect. This makes 2..N concurrent Claude Code sessions work without each one needing its own Chrome extension. (2026-05-14)
 - **D5: shared/ workspace exists but is unused** — TypeScript rootDir/paths fought with the monorepo, so types are duplicated inline in server and extension. Revisit if we genuinely need to share more code. (2026-05-14)
-- **D6: MV3 service worker keepalive via `chrome.alarms` every 15s** — Avoids needing an offscreen document (and the extra permission). On each alarm, reconnect if the socket is dead. (2026-05-14)
-- **D7: Three distribution paths** — npm/npx (Claude Code), MCPB (Claude Desktop), GitHub Release zip (extension only, manual). Don't wait on Chrome Web Store review. (2026-05-14)
+- **D6: MV3 service worker recovery via `chrome.alarms` every minute** — Avoids needing an offscreen document and its extra permission. A dead socket retries after 2s, then doubles to a 60s cap; successful, focused, and user-requested connections reset the delay. The alarm is a one-minute recovery net for suspended service workers and never starts a second attempt while a retry is pending. All alarm, focus, and popup paths wait for persisted profile ownership before connecting, so a dormant profile cannot reclaim during worker startup. This keeps automatic connection while reducing a stopped local server from about 1,800 failed attempts per hour to about 60 after warm-up. (2026-08-24)
+- **D7: Four distribution paths** — npm/npx (Claude Code), MCPB (Claude Desktop), GitHub Release zip, and Chrome Web Store. Tag releases already automate npm and GitHub artifacts; Web Store updates use the developer dashboard until its four repository secrets are configured. (2026-08-24)
 - **D8: Root package is named `yolo-chrome-mcp-monorepo`** — Clashed with the publishable `server/` package name `yolo-chrome-mcp` and broke `npm run -w`. (2026-05-14)
 - **D10: Browser routing is enforced via a PreToolUse hook, set up by `npx yolo-chrome-mcp install`** — MCP `instructions` are advisory and Claude ignored them in practice (Claude jumped straight to `mcp__Claude_in_Chrome__*`). Replaced with a real PreToolUse hook in `~/.claude/settings.json` matching `mcp__Claude_in_Chrome__.*|mcp__Control_Chrome__.*`. The hook script lives at `~/.yolo-chrome-mcp/browser-routing-hook.sh` and returns `{"decision":"block","reason":...}` — telling Claude to use `mcp__yolo-chrome__*` instead, and (when `## Browser routing (yolo-chrome-mcp)` is missing from `~/.claude/CLAUDE.md`) to use `AskUserQuestion` to offer adding it. MCP has no install-time hook for global-config edits, so users run `npx yolo-chrome-mcp install` once — it interactively writes the hook script, registers it in `settings.json`, and appends the rule to `CLAUDE.md`. Idempotent. Removable via `npx yolo-chrome-mcp uninstall-routing`. (2026-05-14)
 - **D12: Multi-profile take-over instead of a silent connection war** — The extension WS is single-client (D4): the server keeps one `extSocket` and closes any prior one. When the same extension was enabled in two Chrome profiles, each profile's auto-reconnect (D6) kept evicting the other → constant flapping. Fix: the server now sends an explicit `{type:"evicted"}` frame before closing the old socket; the evicted extension goes *dormant* (`suppressed`, persisted in `chrome.storage.local`) and stops auto-reconnecting until it is reclaimed. **Reclaim is automatic via window focus**: `chrome.windows.onFocusChanged` on a real window calls `connect(true)`, so simply looking at a profile's window makes it grab the connection (and a profile that's evicted *while focused* reclaims immediately — only the single OS-focused profile reclaims, so two background profiles can't ping-pong). A profile that holds the connection while unfocused keeps it (the terminal-driving case). The popup "このプロファイルで接続" button is a manual fallback and is always visible (it must not vanish during flapping). Last focused/claimed wins; no more war. Also: the extension sends `{type:"hello",label}` with a user-set profile name on connect; the server tracks it (and broadcasts to secondaries via a `{type:"label"}` frame), and `index.ts` appends a `[profile] <name>` sidecar to every tool result so the AI can tell the user which profile it's driving. (2026-06-13)

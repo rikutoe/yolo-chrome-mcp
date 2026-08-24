@@ -7,7 +7,7 @@
 
 ## Project-specific
 - The WS protocol types are duplicated inline in `server/src/wire.ts` and `extension/src/wire.ts`. If you change one, change both.
-- MV3 service worker keepalive uses `chrome.alarms` at 15s. Reconnect logic lives at the bottom of `extension/src/background.ts`.
+- MV3 service worker recovery uses `chrome.alarms` every minute. Active reconnects back off from 2s to a 60s cap; scheduling lives in `extension/src/reconnect.ts`, with lifecycle integration in `extension/src/background.ts`.
 - After rebuilding the extension, you must click the ↻ reload button on the extension's card in `chrome://extensions` — Chrome does not auto-pick up the new build.
 - Adding a new tool:
   1. Define the zod schema + stage-tagged description in `server/src/tools.ts`

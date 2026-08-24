@@ -279,7 +279,7 @@ without re-review)
 | `scripting` | Inject the safety-overlay content script that asks for confirmation before sensitive actions. |
 | `cookies` | Allow the AI to read cookies for the current page when explicitly requested (e.g. debugging auth issues). |
 | `storage` | Persist a single user preference (safety mode: always / dangerous-only / off). |
-| `alarms` | Periodic 15-second keepalive ping so the MV3 service worker reconnects to the local MCP server after Chrome unloads it. |
+| `alarms` | Periodic one-minute recovery wake-up so the MV3 service worker reconnects to the local MCP server after Chrome unloads it. |
 | host_permissions `<all_urls>` | The user decides which tab to operate; we cannot know the URL ahead of time. |
 
 ---

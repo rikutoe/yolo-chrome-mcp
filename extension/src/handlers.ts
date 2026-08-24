@@ -956,8 +956,8 @@ export async function waitForStable({
 // Self-reload: call chrome.runtime.reload() to pick up a freshly built extension.
 // The WS connection drops on reload, so the caller's response may be cut off mid-flight;
 // we schedule the reload after the current event loop tick so the ok ack has a chance to
-// reach the server. The extension will reconnect on the next keepalive alarm (≤15s) or on
-// any tool call attempt (auto-reconnect on send).
+// reach the server. The extension reconnects during its next boot, active retry, or recovery
+// alarm; any later tool call can then use the fresh connection.
 export async function reloadSelf() {
   setTimeout(() => {
     try {

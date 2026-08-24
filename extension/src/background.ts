@@ -1,9 +1,9 @@
 import type { RpcResponse } from "./wire.js";
 import * as h from "./handlers.js";
+import { ReconnectScheduler } from "./reconnect.js";
 
 const WS_URL = "ws://127.0.0.1:8765/";
 let socket: WebSocket | null = null;
-let reconnectTimer: any = null;
 // True when another Chrome profile has taken over the single MCP connection.
 // While suppressed we stop auto-reconnecting (otherwise the two profiles fight
 // over the one socket forever). Cleared only when the user explicitly claims
@@ -14,6 +14,7 @@ let suppressed = false;
 // holds the connection no matter which window is focused, and fights back if
 // evicted by anything other than another pin. Persisted across SW restarts.
 let pinned = false;
+const reconnect = new ReconnectScheduler(() => connect());
 
 const handlers: Record<string, (params: any) => Promise<any>> = {
   listTabs: () => h.listTabs(),
@@ -42,7 +43,10 @@ const handlers: Record<string, (params: any) => Promise<any>> = {
 function connect(userInitiated = false) {
   // The user explicitly asked to connect here → drop any dormant state and
   // take over the connection from whichever profile currently holds it.
-  if (userInitiated) setSuppressed(false);
+  if (userInitiated) {
+    reconnect.reset();
+    setSuppressed(false);
+  }
   if (suppressed) return;
   if (socket && socket.readyState <= WebSocket.OPEN) return;
   try {
@@ -52,6 +56,7 @@ function connect(userInitiated = false) {
     return;
   }
   socket.addEventListener("open", () => {
+    reconnect.reset();
     console.log("[yolo] connected to MCP server");
     setBadge("on");
     sendHello();
@@ -129,15 +134,13 @@ async function bumpUsage() {
 
 function scheduleReconnect() {
   if (suppressed) return; // a peer profile owns the connection; stay dormant
-  if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, 2000);
+  if (socket && socket.readyState <= WebSocket.OPEN) return;
+  reconnect.schedule();
 }
 
 function setSuppressed(value: boolean) {
   suppressed = value;
+  if (value) reconnect.reset();
   void chrome.storage.local.set({ suppressed: value });
 }
 
@@ -176,7 +179,7 @@ function setBadge(state: "on" | "off" | "idle") {
 // Boot: restore dormant state before attempting a connection, so a profile that
 // was taken over previously doesn't immediately rejoin the fight on SW wake.
 // If the user is currently looking at this profile, claim the connection.
-async function boot() {
+async function initialize() {
   h.loadSafetyMode();
   const stored = await chrome.storage.local.get(["suppressed", "pinned"]);
   pinned = !!stored.pinned;
@@ -184,6 +187,12 @@ async function boot() {
   suppressed = pinned ? false : !!stored.suppressed;
   setBadge(suppressed ? "idle" : "off");
   connect(pinned || (await isProfileFocused()));
+}
+
+let bootPromise: Promise<void> | null = null;
+function boot(): Promise<void> {
+  bootPromise ??= initialize();
+  return bootPromise;
 }
 
 async function isProfileFocused(): Promise<boolean> {
@@ -200,11 +209,18 @@ void boot();
 // is the documented way to keep the WS connection lifecycle responsive: each
 // alarm fire wakes the SW, which re-runs module init (which calls connect()
 // again if the socket is gone).
-chrome.alarms.create("yolo-keepalive", { periodInMinutes: 0.25 });
+chrome.alarms.create("yolo-keepalive", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === "yolo-keepalive") {
-    if (!suppressed && (!socket || socket.readyState !== WebSocket.OPEN)) connect();
-  }
+  if (a.name !== "yolo-keepalive") return;
+  void boot().then(() => {
+    if (
+      !reconnect.isScheduled &&
+      !suppressed &&
+      (!socket || socket.readyState !== WebSocket.OPEN)
+    ) {
+      connect();
+    }
+  });
 });
 chrome.runtime.onStartup.addListener(() => void boot());
 chrome.runtime.onInstalled.addListener(() => void boot());
@@ -216,46 +232,52 @@ chrome.runtime.onInstalled.addListener(() => void boot());
 // from a terminal — keeps it; nothing steals it until another profile is focused.)
 chrome.windows.onFocusChanged.addListener((windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
-  connect(true);
+  void boot().then(() => connect(true));
 });
 
 // Popup polls status.
 chrome.runtime.onMessage.addListener((msg, _s, sendResponse) => {
   if (msg?.type === "status") {
     // Email lookup is async; keep the message channel open (return true).
-    void getAccountEmail().then((email) => {
-      sendResponse({
-        connected: socket?.readyState === WebSocket.OPEN,
-        suppressed,
-        pinned,
-        email,
+    void boot()
+      .then(() => getAccountEmail())
+      .then((email) => {
+        sendResponse({
+          connected: socket?.readyState === WebSocket.OPEN,
+          suppressed,
+          pinned,
+          email,
+        });
       });
-    });
     return true;
   }
   if (msg?.type === "setPin") {
     // Popup pin toggle. Pinning claims+locks this profile; unpinning just
     // releases the lock and lets focus-follow resume.
-    const value = !!msg.pinned;
-    setPinned(value);
-    if (value) {
-      connect(true); // claim and lock (hello carries pin:true)
-    } else if (socket?.readyState === WebSocket.OPEN) {
-      try {
-        socket.send(JSON.stringify({ type: "pin", pinned: false }));
-      } catch {}
-    }
-    sendResponse({ ok: true });
-    return false;
+    void boot().then(() => {
+      const value = !!msg.pinned;
+      setPinned(value);
+      if (value) {
+        connect(true); // claim and lock (hello carries pin:true)
+      } else if (socket?.readyState === WebSocket.OPEN) {
+        try {
+          socket.send(JSON.stringify({ type: "pin", pinned: false }));
+        } catch {}
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
   }
   if (msg?.type === "reconnect") {
     // Popup "connect here" → claim the connection for this profile.
-    try {
-      socket?.close();
-    } catch {}
-    connect(true);
-    sendResponse({ ok: true });
-    return false;
+    void boot().then(() => {
+      try {
+        socket?.close();
+      } catch {}
+      connect(true);
+      sendResponse({ ok: true });
+    });
+    return true;
   }
   return false;
 });
