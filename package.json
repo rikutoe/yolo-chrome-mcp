@@ -9,7 +9,7 @@
     "shared"
   ],
   "scripts": {
-    "test": "node scripts/reconnect.test.mjs",
+    "test": "node scripts/reconnect.test.mjs && node scripts/cws-publish.test.mjs",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w extension",
     "build:server": "npm run build -w server",
     "build:extension": "npm run build -w extension",
