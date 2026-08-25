@@ -6,6 +6,13 @@ automatically (via `.github/workflows/release.yml`). This is the one-time setup.
 The store step is skipped until the four `CWS_*` repo secrets exist, so the
 release workflow keeps working before this is done.
 
+## Current setup
+
+- Dedicated Google Cloud project: `yolo-chrome-mcp`
+- Chrome Web Store API: enabled on 2026-08-25
+- Billing account: not linked because this API does not require it
+- Remaining: create publishing credentials and add the repository secrets
+
 ## Prerequisites
 
 - The extension must already exist on the store (do the **first upload manually**
@@ -20,8 +27,8 @@ On the dashboard, open the item → the ID is the long string in the URL
 (`.../devconsole/.../<EXTENSION_ID>/`). Copy it.
 
 ### 2. Enable the Chrome Web Store API
-1. https://console.cloud.google.com/ → create/select a project.
-2. APIs & Services → Library → enable **Chrome Web Store API**.
+
+Completed in the dedicated `yolo-chrome-mcp` project.
 
 ### 3. Create OAuth credentials
 1. APIs & Services → OAuth consent screen → External → add yourself as a
