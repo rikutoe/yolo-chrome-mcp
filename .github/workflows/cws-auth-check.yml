@@ -2,6 +2,12 @@ name: Chrome Web Store Auth Check
 
 on:
   workflow_dispatch:
+    inputs:
+      submit_pending_upload:
+        description: Submit the package already uploaded to Chrome Web Store
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,3 +36,17 @@ jobs:
           curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${ACCESS_TOKEN}" \
             "https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:fetchStatus"
+
+      - name: Submit pending Chrome Web Store upload
+        if: inputs.submit_pending_upload
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ACCESS_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{"publishType":"DEFAULT_PUBLISH","blockOnWarnings":true}' \
+            "https://chromewebstore.googleapis.com/v2/publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}:publish"
