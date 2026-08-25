@@ -14,7 +14,8 @@ release workflow keeps working before this is done.
 - Service account: `chrome-webstore-publisher@yolo-chrome-mcp.iam.gserviceaccount.com`
 - GitHub authentication: keyless and restricted to `rikutoe/yolo-chrome-mcp`
 - Repository variables: configured
-- Remaining: link the service account in the Developer Dashboard
+- Service account linked in the Developer Dashboard: completed 2026-08-25
+- End-to-end keyless authentication check: passed 2026-08-25
 
 ## Prerequisites
 
