@@ -54,6 +54,9 @@ export class ExtensionBridge {
   // Shared state: pending local calls (only used in primary).
   private pending = new Map<string, Pending>();
 
+  /** Once true, init() stops retrying and no promotion is attempted. */
+  private closed = false;
+
   constructor(extensionPort: number, siblingPort?: number) {
     this.extensionPort = extensionPort;
     this.siblingPort = siblingPort ?? extensionPort + 1;
@@ -64,8 +67,9 @@ export class ExtensionBridge {
   // ---- role-aware setup --------------------------------------------------
 
   private async init(): Promise<void> {
-    while (true) {
+    while (!this.closed) {
       const bound = await this.tryBindPrimary();
+      if (this.closed) break;
       if (bound) {
         this.role = "primary";
         process.stderr.write(
@@ -76,6 +80,7 @@ export class ExtensionBridge {
       // Someone else owns :extensionPort. Become a secondary.
       try {
         await this.connectAsSecondary();
+        if (this.closed) break;
         this.role = "secondary";
         process.stderr.write(
           `yolo-chrome-mcp: secondary, relaying via ws://127.0.0.1:${this.siblingPort}\n`
@@ -86,6 +91,8 @@ export class ExtensionBridge {
         await sleep(150);
       }
     }
+    // close() raced with a bind/connect that just succeeded — tear it down.
+    this.teardownSockets();
   }
 
   private tryBindPrimary(): Promise<boolean> {
@@ -222,6 +229,7 @@ export class ExtensionBridge {
     ws.on("close", () => {
       this.siblingClient = null;
       this.failAllPending(new Error("sibling primary disconnected"));
+      if (this.closed) return; // shutting down — don't fight for the port
       // Attempt promotion.
       this.role = "starting";
       void this.init();
@@ -232,6 +240,52 @@ export class ExtensionBridge {
   }
 
   // ---- public API --------------------------------------------------------
+
+  /**
+   * Tear down every socket and server so nothing keeps the event loop alive.
+   * Idempotent. A departing primary frees :extensionPort/:siblingPort here,
+   * which is what lets a surviving secondary win the promotion race.
+   */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.teardownSockets();
+    this.failAllPending(new Error("yolo-chrome-mcp: server shutting down"));
+  }
+
+  private teardownSockets(): void {
+    if (this.extWss) {
+      for (const c of this.extWss.clients) {
+        try {
+          c.terminate();
+        } catch {}
+      }
+      try {
+        this.extWss.close();
+      } catch {}
+      this.extWss = null;
+      this.extSocket = null;
+    }
+    if (this.siblingWss) {
+      for (const c of this.siblingWss.clients) {
+        try {
+          c.terminate();
+        } catch {}
+      }
+      try {
+        this.siblingWss.close();
+      } catch {}
+      this.siblingWss = null;
+      this.siblingSockets.clear();
+      this.siblingRouting.clear();
+    }
+    if (this.siblingClient) {
+      try {
+        this.siblingClient.terminate();
+      } catch {}
+      this.siblingClient = null;
+    }
+  }
 
   isConnected(): boolean {
     if (this.role === "primary") {

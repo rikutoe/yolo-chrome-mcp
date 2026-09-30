@@ -168,3 +168,36 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 // Role + readiness messages are emitted from inside bridge.init().
+
+// ---- lifecycle -------------------------------------------------------------
+// The WS servers (extension + sibling IPC) keep the event loop alive, so
+// without an explicit shutdown path this process outlives its MCP client and
+// accumulates as a PPID-1 orphan — one per finished Claude/codex session.
+// The SDK's StdioServerTransport only subscribes to stdin 'data'/'error' and
+// never notices EOF, so the server has to watch its own lifelines:
+//   1. stdin 'end'/'close'    → the client exited and the pipe drained
+//   2. SIGINT/SIGTERM/SIGHUP  → terminal or session teardown
+//   3. ppid becomes 1         → parent died without our stdin ever closing
+//      (e.g. the npx wrapper was SIGKILLed). No-op where orphans are
+//      reparented to a subreaper instead of PID 1 — stdin EOF covers those.
+let shuttingDown = false;
+function shutdown(reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  process.stderr.write(`yolo-chrome-mcp: shutting down (${reason})\n`);
+  try {
+    bridge.close();
+  } catch {}
+  process.exit(0);
+}
+
+server.onclose = () => shutdown("transport closed");
+process.stdin.on("end", () => shutdown("stdin closed"));
+process.stdin.on("close", () => shutdown("stdin closed"));
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(sig, () => shutdown(sig));
+}
+const PPID_CHECK_MS = Number(process.env.YOLO_PPID_CHECK_MS ?? 15_000);
+setInterval(() => {
+  if (process.ppid === 1) shutdown("parent process died");
+}, PPID_CHECK_MS).unref();
